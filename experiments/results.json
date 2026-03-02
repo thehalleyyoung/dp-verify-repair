@@ -1,0 +1,628 @@
+{
+  "metadata": {
+    "tool": "DP-CEGAR",
+    "version": "0.1.0",
+    "benchmarks": 26,
+    "time_s": 0.01,
+    "timestamp": "2026-03-02T15:21:14Z"
+  },
+  "rq1_bug_detection": {
+    "detail": [
+      {
+        "name": "lap_ok_e0.1",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=0.1",
+        "time_s": 1e-05,
+        "notion": "pure"
+      },
+      {
+        "name": "lap_ok_e0.5",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=0.5",
+        "time_s": 5e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "lap_ok_e1.0",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=1.0",
+        "time_s": 3e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "lap_ok_e2.0",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=2.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "lap_ok_s2.0",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=1.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "lap_ok_s5.0",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=1.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "lap_bug_scale",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=1.0",
+        "time_s": 1e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "lap_bug_nonoise",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=1000.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "gauss_ok_e0.1",
+        "buggy": false,
+        "detected": false,
+        "loss": "(\u03b5=0.10000000000000002, \u03b4=1e-05)",
+        "time_s": 8e-06,
+        "notion": "approx"
+      },
+      {
+        "name": "gauss_ok_e0.5",
+        "buggy": false,
+        "detected": false,
+        "loss": "(\u03b5=0.5, \u03b4=1e-05)",
+        "time_s": 5e-06,
+        "notion": "approx"
+      },
+      {
+        "name": "gauss_ok_e1.0",
+        "buggy": false,
+        "detected": false,
+        "loss": "(\u03b5=1.0, \u03b4=1e-05)",
+        "time_s": 3e-06,
+        "notion": "approx"
+      },
+      {
+        "name": "gauss_ok_zcdp",
+        "buggy": false,
+        "detected": false,
+        "loss": "(\u03b5=4.844805262605389, \u03b4=1e-05)",
+        "time_s": 3e-06,
+        "notion": "approx"
+      },
+      {
+        "name": "gauss_bug_sig",
+        "buggy": true,
+        "detected": true,
+        "loss": "(\u03b5=4.844805262605389, \u03b4=1e-05)",
+        "time_s": 2e-06,
+        "notion": "approx"
+      },
+      {
+        "name": "gauss_bug_half",
+        "buggy": true,
+        "detected": true,
+        "loss": "(\u03b5=16.1493508753513, \u03b4=1e-05)",
+        "time_s": 2e-06,
+        "notion": "approx"
+      },
+      {
+        "name": "svt_ok_5q",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=1.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "svt_ok_numsparse",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=1.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "svt_b1_nothresh",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=4.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "svt_b2_freshth",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=2.5",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "svt_b3_sens",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=2.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "svt_b4_nohalt",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=2.2222222222222223",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "svt_b5_2eps",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=2.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "svt_b6_leak",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=3.3333333333333335",
+        "time_s": 1e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "comp_3q",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=1.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "hist_5",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=1.0",
+        "time_s": 3e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "comp_bug",
+        "buggy": true,
+        "detected": true,
+        "loss": "\u03b5=3.0",
+        "time_s": 2e-06,
+        "notion": "pure"
+      },
+      {
+        "name": "exp_ok",
+        "buggy": false,
+        "detected": false,
+        "loss": "\u03b5=0.5",
+        "time_s": 1e-06,
+        "notion": "pure"
+      }
+    ],
+    "metrics": {
+      "DP-CEGAR": {
+        "tp": 11,
+        "fp": 0,
+        "fn": 0,
+        "tn": 15,
+        "unsupported": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "LightDP": {
+        "tp": 9,
+        "fp": 0,
+        "fn": 2,
+        "tn": 14,
+        "unsupported": 1,
+        "precision": 1.0,
+        "recall": 0.8182,
+        "f1": 0.9
+      },
+      "CheckDP": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 1,
+        "tn": 14,
+        "unsupported": 1,
+        "precision": 1.0,
+        "recall": 0.9091,
+        "f1": 0.9524
+      },
+      "OpenDP": {
+        "tp": 4,
+        "fp": 0,
+        "fn": 0,
+        "tn": 10,
+        "unsupported": 12,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    }
+  },
+  "rq2_multi_notion": {
+    "results": [
+      {
+        "mechanism": "lap_ok_e0.1",
+        "notions": {
+          "pure_dp": true,
+          "approx_dp": true,
+          "zcdp": true,
+          "rdp": true,
+          "gdp": false,
+          "fdp": false
+        },
+        "count": 4
+      },
+      {
+        "mechanism": "lap_ok_e0.5",
+        "notions": {
+          "pure_dp": true,
+          "approx_dp": true,
+          "zcdp": true,
+          "rdp": true,
+          "gdp": false,
+          "fdp": false
+        },
+        "count": 4
+      },
+      {
+        "mechanism": "lap_ok_e1.0",
+        "notions": {
+          "pure_dp": true,
+          "approx_dp": true,
+          "zcdp": true,
+          "rdp": true,
+          "gdp": false,
+          "fdp": false
+        },
+        "count": 4
+      },
+      {
+        "mechanism": "lap_ok_e2.0",
+        "notions": {
+          "pure_dp": true,
+          "approx_dp": true,
+          "zcdp": true,
+          "rdp": true,
+          "gdp": false,
+          "fdp": false
+        },
+        "count": 4
+      },
+      {
+        "mechanism": "lap_ok_s2.0",
+        "notions": {
+          "pure_dp": true,
+          "approx_dp": true,
+          "zcdp": true,
+          "rdp": true,
+          "gdp": false,
+          "fdp": false
+        },
+        "count": 4
+      },
+      {
+        "mechanism": "lap_ok_s5.0",
+        "notions": {
+          "pure_dp": true,
+          "approx_dp": true,
+          "zcdp": true,
+          "rdp": true,
+          "gdp": false,
+          "fdp": false
+        },
+        "count": 4
+      }
+    ],
+    "coverage": {
+      "DP-CEGAR": 6,
+      "LightDP": 2,
+      "CheckDP": 2,
+      "OpenDP": 3,
+      "DiffPrivLib": 2
+    }
+  },
+  "rq3_repair": {
+    "results": [
+      {
+        "mechanism": "lap_bug_scale",
+        "bug": "scale=\u0394f\u00b7\u03b5",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0003
+      },
+      {
+        "mechanism": "lap_bug_nonoise",
+        "bug": "no noise",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0003
+      },
+      {
+        "mechanism": "gauss_bug_sig",
+        "bug": "\u03c3=\u0394f/\u03b5 missing log",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0001
+      },
+      {
+        "mechanism": "gauss_bug_half",
+        "bug": "\u03c3 halved",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0001
+      },
+      {
+        "mechanism": "svt_b1_nothresh",
+        "bug": "no threshold noise",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0002
+      },
+      {
+        "mechanism": "svt_b2_freshth",
+        "bug": "fresh thresh/query",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0002
+      },
+      {
+        "mechanism": "svt_b3_sens",
+        "bug": "wrong sensitivity",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0002
+      },
+      {
+        "mechanism": "svt_b4_nohalt",
+        "bug": "no halt after c",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0002
+      },
+      {
+        "mechanism": "svt_b5_2eps",
+        "bug": "double budget",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0002
+      },
+      {
+        "mechanism": "svt_b6_leak",
+        "bug": "leaks noisy value",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0002
+      },
+      {
+        "mechanism": "comp_bug",
+        "bug": "under-budget",
+        "success": false,
+        "verdict": "NO_REPAIR",
+        "time_s": 0.0002
+      }
+    ],
+    "rate": 0.0,
+    "count": 0,
+    "total": 11
+  },
+  "rq4_scalability": [
+    {
+      "draws": 1,
+      "time_s": 3e-06,
+      "private": true
+    },
+    {
+      "draws": 2,
+      "time_s": 3e-06,
+      "private": true
+    },
+    {
+      "draws": 3,
+      "time_s": 2e-06,
+      "private": true
+    },
+    {
+      "draws": 5,
+      "time_s": 2e-06,
+      "private": true
+    },
+    {
+      "draws": 8,
+      "time_s": 3e-06,
+      "private": true
+    },
+    {
+      "draws": 10,
+      "time_s": 4e-06,
+      "private": true
+    },
+    {
+      "draws": 15,
+      "time_s": 4e-06,
+      "private": true
+    },
+    {
+      "draws": 20,
+      "time_s": 5e-06,
+      "private": true
+    },
+    {
+      "draws": 30,
+      "time_s": 7e-06,
+      "private": true
+    },
+    {
+      "draws": 50,
+      "time_s": 1e-05,
+      "private": true
+    }
+  ],
+  "rq5_certificates": {
+    "results": [
+      {
+        "mechanism": "lap_ok_e0.1",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "lap_ok_e0.5",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "lap_ok_e1.0",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "lap_ok_e2.0",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "lap_ok_s2.0",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "lap_ok_s5.0",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "lap_bug_scale",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "lap_bug_nonoise",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "gauss_ok_e0.1",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "gauss_ok_e0.5",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "gauss_ok_e1.0",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "gauss_ok_zcdp",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "gauss_bug_sig",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "gauss_bug_half",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "svt_ok_5q",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "svt_ok_numsparse",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "svt_b1_nothresh",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "svt_b2_freshth",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "svt_b3_sens",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "svt_b4_nohalt",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "svt_b5_2eps",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "svt_b6_leak",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "comp_3q",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "hist_5",
+        "type": "VERIF",
+        "valid": true
+      },
+      {
+        "mechanism": "comp_bug",
+        "type": "REFUT",
+        "valid": true
+      },
+      {
+        "mechanism": "exp_ok",
+        "type": "VERIF",
+        "valid": true
+      }
+    ],
+    "valid": 26,
+    "total": 26,
+    "soundness": 1.0
+  },
+  "headline": {
+    "dpcegar_f1": 1.0,
+    "lightdp_f1": 0.9,
+    "checkdp_f1": 0.9524,
+    "opendp_f1": 1.0,
+    "notion_coverage": 6,
+    "repair_rate": 0.0,
+    "cert_soundness": 1.0
+  }
+}

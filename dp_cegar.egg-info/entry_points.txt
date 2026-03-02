@@ -1,0 +1,2 @@
+[console_scripts]
+dpcegar = dpcegar.cli.main:cli
