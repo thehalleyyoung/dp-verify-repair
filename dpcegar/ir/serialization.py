@@ -600,4 +600,107 @@ def from_dict(d: dict[str, Any]) -> MechIR | IRNode | TypedExpr | PrivacyBudget 
     if kind in _expr_types:
         return _expr_from_dict(d)
 
+    # Try as simplified mechanism JSON (no _type field)
+    if "mechanism_type" in d or ("name" in d and "noise_distribution" in d):
+        return _mechir_from_simplified(d)
+
     raise InternalError(f"Unknown top-level _type in JSON: {kind!r}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIMPLIFIED JSON MECHANISM FORMAT
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+_NOISE_DIST_MAP: dict[str, NoiseKind] = {
+    "laplace": NoiseKind.LAPLACE,
+    "gaussian": NoiseKind.GAUSSIAN,
+    "exponential": NoiseKind.EXPONENTIAL,
+}
+
+
+def _mechir_from_simplified(d: dict[str, Any]) -> MechIR:
+    """Build a MechIR from a simplified JSON mechanism specification.
+
+    Expected schema::
+
+        {
+          "name": "laplace",
+          "epsilon": 1.0,
+          "delta": 0.0,            // optional, for approx DP
+          "sensitivity": 1.0,
+          "mechanism_type": "additive_noise",
+          "noise_distribution": "laplace",
+          "noise_scale": 1.0,      // optional, defaults to sensitivity/epsilon
+          "parameters": {}         // optional extra metadata
+        }
+    """
+    name = d.get("name", "mechanism")
+    epsilon = float(d.get("epsilon", 1.0))
+    delta = d.get("delta")
+    sensitivity = float(d.get("sensitivity", 1.0))
+    noise_dist_str = d.get("noise_distribution", "laplace").lower()
+    noise_kind = _NOISE_DIST_MAP.get(noise_dist_str)
+    if noise_kind is None:
+        raise InternalError(
+            f"Unknown noise_distribution: {noise_dist_str!r}. "
+            f"Supported: {', '.join(_NOISE_DIST_MAP)}"
+        )
+
+    noise_scale = float(d.get("noise_scale", sensitivity / epsilon))
+
+    # Build budget
+    if delta is not None and float(delta) > 0:
+        budget: PrivacyBudget = ApproxBudget(epsilon=epsilon, delta=float(delta))
+    else:
+        budget = PureBudget(epsilon=epsilon)
+
+    # Build IR nodes: query → noise draw → add → return
+    query_var = Var(ty=IRType.REAL, name="true_answer")
+    noise_var = Var(ty=IRType.REAL, name="noise")
+    result_var = Var(ty=IRType.REAL, name="result")
+
+    db_param = ParamDecl(name="db", ty=IRType.ARRAY, is_database=True)
+    query_param = ParamDecl(name="query", ty=IRType.REAL, is_database=False)
+
+    query_node = QueryNode(
+        target=query_var,
+        query_name="query",
+        args=(Var(ty=IRType.ARRAY, name="db"),),
+        sensitivity=Const.real(sensitivity),
+    )
+    noise_node = NoiseDrawNode(
+        target=noise_var,
+        noise_kind=noise_kind,
+        center=Const.real(0.0),
+        scale=Const.real(noise_scale),
+        sensitivity=Const.real(sensitivity),
+    )
+    assign_node = AssignNode(
+        target=result_var,
+        value=BinOp(
+            ty=IRType.REAL,
+            op=BinOpKind.ADD,
+            left=query_var,
+            right=noise_var,
+        ),
+    )
+    return_node = ReturnNode(value=result_var)
+
+    body = SequenceNode(stmts=[query_node, noise_node, assign_node, return_node])
+
+    extra_params = d.get("parameters", {})
+    metadata = {
+        "mechanism_type": d.get("mechanism_type", "additive_noise"),
+        "source_format": "simplified_json",
+        **extra_params,
+    }
+
+    return MechIR(
+        name=name,
+        params=[db_param, query_param],
+        body=body,
+        return_type=IRType.REAL,
+        budget=budget,
+        metadata=metadata,
+    )

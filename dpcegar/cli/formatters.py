@@ -393,6 +393,130 @@ class RichFormatter(ResultFormatter):
 
 
 # ---------------------------------------------------------------------------
+# CSV formatter
+# ---------------------------------------------------------------------------
+
+
+class CSVFormatter(ResultFormatter):
+    """Comma-separated values output for CI/CD integration."""
+
+    def format_verification(self, result: CEGARResult) -> str:
+        """Return *result* as CSV rows (header + data)."""
+        verdict = result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict)
+        budget_str = _budget_to_str(result.budget) if result.budget else ""
+        bounds = str(result.final_bounds) if result.final_bounds else ""
+        lines = ["verdict,budget,bounds"]
+        lines.append(f"{verdict},{budget_str},{bounds}")
+        return "\n".join(lines)
+
+    def format_repair(self, result: RepairResult) -> str:
+        """Return *result* as CSV rows."""
+        verdict = result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict)
+        cost = str(result.repair_cost) if result.repair_cost is not None else ""
+        lines = ["verdict,repair_cost"]
+        lines.append(f"{verdict},{cost}")
+        return "\n".join(lines)
+
+    def format_multi_variant(self, results: dict[str, CEGARResult]) -> str:
+        """Return multi-notion results as CSV."""
+        lines = ["notion,verdict,budget"]
+        for notion, res in results.items():
+            verdict = res.verdict.value if isinstance(res.verdict, Enum) else str(res.verdict)
+            budget_str = _budget_to_str(res.budget) if res.budget else ""
+            lines.append(f"{notion},{verdict},{budget_str}")
+        return "\n".join(lines)
+
+    def format_profile(self, profile_data: list[dict[str, Any]]) -> str:
+        """Return profiling data as CSV."""
+        lines = ["alpha,verdict,bounds"]
+        for row in profile_data:
+            lines.append(f"{row.get('alpha', '')},{row.get('verdict', '')},{row.get('bounds', '')}")
+        return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# SARIF formatter (GitHub Code Scanning)
+# ---------------------------------------------------------------------------
+
+
+class SARIFFormatter(ResultFormatter):
+    """SARIF 2.1.0 output for GitHub Code Scanning integration."""
+
+    SARIF_VERSION = "2.1.0"
+    SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
+
+    def format_verification(self, result: CEGARResult) -> str:
+        """Return *result* as a SARIF JSON document."""
+        verdict = result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict)
+        is_violation = result.verdict != CEGARVerdict.VERIFIED
+
+        results_list: list[dict[str, Any]] = []
+        if is_violation:
+            sarif_result: dict[str, Any] = {
+                "ruleId": "dp-cegar/privacy-violation",
+                "level": "error",
+                "message": {
+                    "text": f"Privacy violation detected: mechanism does not satisfy the requested budget. Verdict: {verdict}",
+                },
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": "mechanism"},
+                            "region": {"startLine": 1},
+                        }
+                    }
+                ],
+            }
+            if result.counterexample:
+                sarif_result["message"]["text"] += f" Counterexample: {_safe_serialize(result.counterexample)}"
+            results_list.append(sarif_result)
+
+        sarif: dict[str, Any] = {
+            "$schema": self.SARIF_SCHEMA,
+            "version": self.SARIF_VERSION,
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "DP-CEGAR",
+                            "version": "0.1.0",
+                            "informationUri": "https://github.com/dp-cegar/dp-cegar",
+                            "rules": [
+                                {
+                                    "id": "dp-cegar/privacy-violation",
+                                    "name": "PrivacyViolation",
+                                    "shortDescription": {
+                                        "text": "Differential privacy budget exceeded",
+                                    },
+                                    "fullDescription": {
+                                        "text": "The mechanism does not satisfy the specified differential privacy budget. A counterexample demonstrates a pair of neighboring databases where the privacy loss exceeds the allowed budget.",
+                                    },
+                                    "defaultConfiguration": {"level": "error"},
+                                    "helpUri": "https://github.com/dp-cegar/dp-cegar#readme",
+                                },
+                            ],
+                        }
+                    },
+                    "results": results_list,
+                }
+            ],
+        }
+        return json.dumps(sarif, indent=2, default=str)
+
+    def format_repair(self, result: RepairResult) -> str:
+        """Return *result* as a SARIF JSON document."""
+        return JSONFormatter().format_repair(result)
+
+    def format_multi_variant(self, results: dict[str, CEGARResult]) -> str:
+        """Return multi-notion results as a SARIF JSON document."""
+        return JSONFormatter().format_multi_variant(results)
+
+    def format_profile(self, profile_data: list[dict[str, Any]]) -> str:
+        """Return profiling data as JSON (SARIF not applicable)."""
+        return JSONFormatter().format_profile(profile_data)
+
+
+# ---------------------------------------------------------------------------
 # Table formatter (ASCII)
 # ---------------------------------------------------------------------------
 

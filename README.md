@@ -1,319 +1,22 @@
-# DP-CEGAR: Counterexample-Guided Verification and Repair for Differential Privacy
+# DP-CEGAR: Counterexample-Guided Verification & Repair for Differential Privacy
 
-A counterexample-guided verification-and-repair engine that symbolically analyzes
-differential privacy mechanism implementations against all major DP variants
-(pure, approximate, zCDP, RDP, f-DP, GDP), discovers subtle privacy bugs via
-SMT-driven counterexample search over neighboring-database pairs, and automatically
-synthesizes minimal provably-correct code patches with machine-checkable
-certificates. DP-CEGAR bridges Narodytska's formal-methods verification with
-Dwork and Roth's DP foundations to deliver what no existing tool provides: a
-unified system that can both **locate** and **repair** privacy-violating bugs
-across all six privacy notions simultaneously.
-
-## Key Capabilities
-
-- **Automated verification** of differential privacy mechanisms against formal
-  privacy specifications, with no annotations required beyond the privacy budget.
-- **Multi-notion analysis** across six privacy definitions — pure ε-DP, approximate
-  (ε,δ)-DP, zero-concentrated DP, Rényi DP, f-DP, and Gaussian DP — with a
-  privacy implication lattice that propagates results between notions.
-- **Counterexample generation** that produces concrete neighboring-database pairs
-  and noise draws witnessing privacy violations.
-- **Automated repair synthesis** via CEGIS (Counterexample-Guided Inductive
-  Synthesis) using Optimization Modulo Theories to find minimal code patches that
-  restore privacy guarantees.
-- **Machine-checkable certificates** (LFSC/Alethe proof format) providing
-  independently verifiable evidence of correctness.
-- **Compositional reasoning** with sequential, parallel, and privacy amplification
-  composition theorems.
-
-## Comparison with Existing Tools
-
-| Feature | **DP-CEGAR** | LightDP | CheckDP | OpenDP | DiffPrivLib |
-|---|---|---|---|---|---|
-| Automated verification | ✅ | ✅ | ✅ | Partial | ✗ |
-| Counterexample generation | ✅ | ✗ | ✅ | ✗ | ✗ |
-| Automated repair | ✅ | ✗ | ✗ | ✗ | ✗ |
-| Pure (ε)-DP | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Approximate (ε,δ)-DP | ✅ | ✅ | ✅ | ✅ | ✅ |
-| zCDP | ✅ | ✗ | ✗ | ✅ | ✗ |
-| Rényi DP | ✅ | ✗ | ✗ | ✅ | ✗ |
-| f-DP / GDP | ✅ | ✗ | ✗ | ✗ | ✗ |
-| Multi-notion lattice | ✅ | ✗ | ✗ | ✗ | ✗ |
-| Proof certificates | ✅ | ✗ | ✗ | ✗ | ✗ |
-| No annotations required | ✅ | ✗ (types) | ✗ (align) | ✅ | ✅ |
-| Composition theorems | ✅ | ✅ | ✅ | ✅ | ✅ |
-
----
-
-## Architecture Overview
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                          DP-CEGAR Pipeline                                   │
-│                                                                              │
-│  ┌─────────┐    ┌────────┐    ┌──────────┐    ┌───────────────┐              │
-│  │ Python  │    │        │    │          │    │  Path         │              │
-│  │ Source  │───▶│ Parser │───▶│  MechIR  │───▶│  Enumerator   │              │
-│  │ (.py)   │    │        │    │  (SSA)   │    │               │              │
-│  └─────────┘    └────────┘    └──────────┘    └───────┬───────┘              │
-│                                                       │                      │
-│                                                       ▼                      │
-│                                              ┌───────────────┐               │
-│                                              │  Symbolic     │               │
-│                                              │  Paths        │               │
-│                                              │  {π₁,…,πₙ}   │               │
-│                                              └───────┬───────┘               │
-│                                                      │                       │
-│                                                      ▼                       │
-│  ┌──────────────────────────────────────────────────────────────────────┐     │
-│  │                    Density Ratio Builder                             │     │
-│  │                                                                      │     │
-│  │  For each path πᵢ, compute:                                         │     │
-│  │     ratio(πᵢ) = ∏ⱼ  f(nⱼ; cⱼ(D), sⱼ) / f(nⱼ; cⱼ(D'), sⱼ)       │     │
-│  │                                                                      │     │
-│  │  where f is the noise PDF, cⱼ is the center, sⱼ is the scale       │     │
-│  └──────────────────────────────────┬───────────────────────────────────┘     │
-│                                     │                                        │
-│                                     ▼                                        │
-│                            ┌─────────────────┐                               │
-│                            │  Privacy Loss   │                               │
-│                            │  Computer       │                               │
-│                            │  (6 notions)    │                               │
-│                            └────────┬────────┘                               │
-│                                     │                                        │
-│                                     ▼                                        │
-│  ┌──────────────────────────────────────────────────────────────────────┐     │
-│  │                       SMT Encoder (Z3)                               │     │
-│  │                                                                      │     │
-│  │  Encode: ∃ D,D' adjacent. ∃ noise.                                  │     │
-│  │          privacy_loss(ratio) > budget                                │     │
-│  │                                                                      │     │
-│  │  Theory: QF_LRA + transcendentals (log, exp, Φ)                     │     │
-│  └──────────────────────────────────┬───────────────────────────────────┘     │
-│                                     │                                        │
-│                                     ▼                                        │
-│  ┌──────────────────────────────────────────────────────────────────────┐     │
-│  │                     CEGAR Verification Engine                        │     │
-│  │                                                                      │     │
-│  │  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐         │     │
-│  │  │   Abstract   │────▶│  Candidate   │────▶│  Concrete    │         │     │
-│  │  │   Verify     │     │  Extract     │     │  Check       │         │     │
-│  │  └──────┬───────┘     └──────────────┘     └──────┬───────┘         │     │
-│  │         │                                         │                  │     │
-│  │         │ safe                          real cex ──┤── spurious       │     │
-│  │         ▼                                  │      │                  │     │
-│  │    ✅ VERIFIED                              │      ▼                  │     │
-│  │                                            │  ┌──────────┐          │     │
-│  │                                            │  │ Refine   │──────┐   │     │
-│  │                                            │  │ Abstract │      │   │     │
-│  │                                            │  └──────────┘      │   │     │
-│  │                                            │                    │   │     │
-│  │                                            ▼                    │   │     │
-│  │                                   ❌ COUNTEREXAMPLE         (loop)  │     │
-│  │                                                                 │   │     │
-│  └─────────────────────────────────────────────────────────────────┘   │     │
-│                                     │                                        │
-│                            (if violated)                                     │
-│                                     ▼                                        │
-│  ┌──────────────────────────────────────────────────────────────────────┐     │
-│  │                    CEGIS Repair Synthesizer                          │     │
-│  │                                                                      │     │
-│  │  Templates: noise scale, clipping bound, threshold adjustment        │     │
-│  │  OMT objective: minimize weighted L1 distance from original          │     │
-│  │  Result: minimal patch + proof certificate                           │     │
-│  └──────────────────────────────────────────────────────────────────────┘     │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Module Map
-
-### `dpcegar/ir/` — MechIR Intermediate Representation
-
-The core intermediate representation for differential privacy mechanisms,
-operating in SSA (Static Single Assignment) form with explicit phi-nodes at
-control-flow merge points.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `nodes.py` | ~776 | IR node types: `AssignNode`, `NoiseDrawNode`, `BranchNode`, `MergeNode`, `LoopNode`, `QueryNode`, `ReturnNode`, `SequenceNode`, `NoOpNode`. Also `MechIR` (top-level container), `ParamDecl`, `CFG`, `CFGEdge`, and `CFGBuilder`. |
-| `types.py` | ~1000 | Type system (`IRType`: INT, REAL, BOOL, ARRAY, TUPLE), expression AST (`Var`, `Const`, `BinOp`, `UnaryOp`, `FuncCall`, `Abs`, `Log`, `Exp`, `Sqrt`, `Phi`, `PhiInv`, `Max`, `Min`, `Cond`, `LetExpr`, `SumExpr`), noise kinds (`NoiseKind`: LAPLACE, GAUSSIAN, EXPONENTIAL), and privacy budget types (`PureBudget`, `ApproxBudget`, `ZCDPBudget`, `RDPBudget`, `GDPBudget`, `FDPBudget`). |
-| `visitors.py` | ~625 | Visitor infrastructure: `IRNodeVisitor`, `ExprTransformer`, `NodeExprTransformer`, `SSANumbering`, `FreeVarCollector`, `ExprSubstituter`, `NodePrinter`, `IRValidator`. |
-| `serialization.py` | ~604 | JSON round-trip serialization: `IREncoder`, `to_json()`, `from_json()`, `to_dict()`, `from_dict()`. Handles all IR types with full fidelity. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/parser/` — Python to MechIR Translation
-
-Parses a Python subset (the DPImp language) into MechIR, including lexing,
-preprocessing, AST bridging, type checking, and sensitivity analysis.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `lexer.py` | ~714 | Indentation-aware lexer producing `Token` objects with `TokenType` enum. Handles noise primitives (`NOISE_LAPLACE`, `NOISE_GAUSSIAN`, `NOISE_EXPONENTIAL`) and decorators (`@dp_mechanism`, `@sensitivity`). |
-| `preprocessor.py` | ~674 | `ImportResolver` (resolves DP library imports), macro expansion (`noisy_count`, `noisy_sum`, `above_threshold`), elif normalization, helper inlining, and runtime stripping. Returns `PreprocessResult`. |
-| `ast_bridge.py` | ~500 | Converts Python AST + lexer output to MechIR tree. Handles function definitions, control flow, and noise/query calls. |
-| `type_checker.py` | ~826 | `TypeChecker` validates DPImp restrictions: no recursion, bounded loops only, no dynamic dispatch, known noise primitives only, numeric types. Tracks `SensitivityKind` (CONSTANT, QUERY_RESULT, DERIVED, NOISY, UNKNOWN) through `TypeEnvironment`. |
-| `sensitivity.py` | ~400 | Computes sensitivity bounds for database queries. Integrates with the type checker for data-flow-based sensitivity analysis. |
-| `source_map.py` | ~345 | `SourceMap` maintains bidirectional mapping between IR node IDs and source code locations (`SourceRange`), enabling error messages that point back to user code. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/paths/` — Symbolic Path Enumeration
-
-Enumerates all feasible execution paths through a MechIR program, unrolling
-bounded loops and checking path feasibility via SMT.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `symbolic_path.py` | ~400 | `SymbolicPath` (execution trace with conditions, noise draws, output), `PathCondition` (conjunction of boolean guards), `NoiseDrawInfo` (noise metadata), `PathSet` (collection with query ops). |
-| `enumerator.py` | ~500 | `PathEnumerator` performs DFS/BFS exploration of the MechIR CFG, splitting at branches, collecting noise draws, and producing the `PathSet`. |
-| `loop_unroller.py` | ~400 | `LoopUnroller` converts bounded loops into acyclic CFGs by unrolling up to the bound, inserting phi-nodes at merge points. |
-| `feasibility.py` | ~350 | `FeasibilityAnalyzer` prunes infeasible paths by checking satisfiability of path conditions using Z3. |
-| `path_condition.py` | ~350 | `PathCondition` construction, simplification, conjunction, and satisfiability operations. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/density/` — Density Ratio and Privacy Loss
-
-Constructs symbolic density ratios for each path and computes privacy loss
-under each DP notion.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `ratio_builder.py` | ~600 | `DensityRatioBuilder` constructs symbolic density ratio expressions from symbolic paths. For each path πᵢ, the ratio is the product of noise PDF ratios across all noise draws. |
-| `noise_models.py` | ~500 | `NoiseModel` base class with `LaplaceNoise`, `GaussianNoise`, `ExponentialNoise` implementations. Each provides PDF, log-PDF, CDF, and privacy loss formulas. Factory via `get_noise_model(kind)`. |
-| `privacy_loss.py` | ~600 | `PrivacyLossComputer` evaluates privacy loss from density ratios under each of the six DP notions. Returns `PrivacyLossResult` (notion, is_private, computed_cost, worst_case_ratio). |
-| `composition.py` | ~500 | Composition theorems: sequential composition, parallel composition, privacy amplification by subsampling, advanced composition. `Composer` applies the appropriate rule. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/smt/` — SMT Encoding and Solving
-
-Encodes privacy verification problems as SMT formulas and solves them using Z3,
-with support for optimization (OMT) for repair synthesis.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `encoding.py` | ~800 | `SMTEncoding` translates density ratios and privacy constraints into quantifier-free linear real arithmetic (QF_LRA) plus transcendental extensions. |
-| `privacy_encoder.py` | ~700 | `PrivacyEncoder` encodes each privacy notion's specific constraint (e.g., ratio ≤ eᵋ for pure DP, log-moment bound for RDP). |
-| `solver.py` | ~600 | `SMTSolver` wraps Z3 with incremental solving, push/pop, timeout, and portfolio support. Returns `SolverResult` with `CheckResult` (SAT, UNSAT, UNKNOWN, TIMEOUT, ERROR). |
-| `counterexample.py` | ~600 | Extracts and interprets concrete counterexamples from SAT models: neighboring databases, noise draws, and the observed privacy loss. |
-| `optimizer.py` | ~600 | OMT (Optimization Modulo Theories) for repair synthesis. Minimizes repair cost subject to privacy constraints. |
-| `transcendental.py` | ~600 | Handles transcendental functions (log, exp, erf, Gaussian CDF Φ) within SMT, using piecewise-linear approximations and interval refinement. |
-| `theory_selection.py` | ~500 | `TheoryAnalyzer` auto-configures the SMT theory (`QF_LRA`, `QF_NIA`, etc.) based on constraint structure. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/cegar/` — CEGAR Verification Engine
-
-The core counterexample-guided abstraction refinement loop that determines
-whether a mechanism satisfies a given privacy budget.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `engine.py` | ~1200 | `CEGAREngine` drives the main loop: abstract verify → candidate extraction → concrete check → refine. Contains `AbstractVerifier`, `CandidateExtractor`, `ConcreteChecker`, `SpuriousnessAnalyzer`, `ConvergenceTracker`. Returns `CEGARResult` with `CEGARVerdict` (VERIFIED, VIOLATED, UNKNOWN, TIMEOUT). |
-| `orchestrator.py` | ~800 | `VerificationOrchestrator` runs the full pipeline (parse → paths → density → CEGAR → result). Also `BatchVerifier` for multiple mechanisms/budgets, `PipelineCache`, `ResultAggregator`. Pipeline stages: PARSING, PATH_ENUMERATION, DENSITY_CONSTRUCTION, PRIVACY_ANALYSIS, CEGAR_VERIFICATION, REPAIR, COMPLETED, FAILED. |
-| `abstraction.py` | ~800 | `AbstractionState`, `AbstractState`, `AbstractDensityBound`, `InitialAbstraction`, `PathPartition`, `WideningOperator`. Manages the abstraction lattice refined by CEGAR. |
-| `refinement.py` | ~800 | `Counterexample`, `RefinementOperator`, `RefinementSelector`, `RefinementHistory`, `InfeasibilityProof`, `ConvergenceDetector`. Implements predicate refinement and path splitting. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/repair/` — CEGIS Repair Synthesis
-
-Counterexample-guided inductive synthesis of minimal code patches that restore
-privacy guarantees.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `synthesizer.py` | ~800 | `RepairSynthesizer` runs the CEGIS loop: synthesize (OMT) → verify (CEGAR) → accumulate counterexamples. `CostFunction` defines weighted L1 distance. `RepairMinimizer` finds minimum-cost repair. Returns `RepairResult` with `RepairVerdict` (SUCCESS, NO_REPAIR, TIMEOUT, ERROR). |
-| `templates.py` | ~700 | `RepairTemplate`, `RepairParameter`, `RepairSite`, `CompositeRepair`, `TemplateCost`, `TemplateEnumerator`, `TemplateValidator`. Templates for noise-scale adjustment, clipping-bound modification, threshold tuning. |
-| `patcher.py` | ~600 | `MechPatcher` applies `Patch` objects to MechIR trees. `PatchValidator` checks that patches preserve non-privacy semantics (e.g., output type). |
-| `validator.py` | ~600 | End-to-end validation of repaired mechanisms: re-verifies the patched mechanism against the original privacy budget. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/variants/` — Multi-Variant Privacy Checker
-
-Verifies mechanisms against multiple privacy notions simultaneously, exploiting
-the implication lattice to avoid redundant work.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `multi_checker.py` | ~900 | `MultiVariantChecker` orchestrates verification across all six notions. `PlanOptimizer` builds an efficient `VerificationPlan`. Results: `VariantResult` (per-notion), `MultiVariantResult` (aggregate), `DerivedGuarantee` (lattice-propagated). Statuses: VERIFIED, FALSIFIED, UNKNOWN, SKIPPED, DERIVED. |
-| `lattice.py` | ~800 | `ImplicationLattice` models the implication relationships between DP notions. `PrivacyLatticeNode` per notion, `NodeStatus` (UNKNOWN, VERIFIED, FALSIFIED). Propagates verified results downward and counterexamples upward. |
-| `conversions.py` | ~600 | `BudgetConverter` converts between privacy notions: RDP→Approx, zCDP→Approx, zCDP→RDP, GDP→Approx, GDP→f-DP, etc. |
-| `privacy_profile.py` | ~600 | `PrivacyProfile` computes the full privacy-loss curve (RDP as a function of α, or the (ε,δ) trade-off curve). |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/certificates/` — Proof Certificates
-
-Generates machine-checkable evidence of verification and repair outcomes.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `certificate.py` | ~700 | `Certificate` object with `CertificateType` (VERIFICATION, REFUTATION, REPAIR, COMPOSITE, CHAIN) and `ProofFormat` (INTERNAL, LFSC, ALETHE, JSON). Supports serialization, validation, and chaining. |
-| `proof_extractor.py` | ~600 | `ProofExtractor` converts SMT proofs (UNSAT cores for verification, SAT witnesses for counterexamples) into LFSC/Alethe format. |
-| `report.py` | ~600 | `VerificationReport` generates human-readable summaries combining proof certificates with timing statistics and counterexample details. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/cli/` — Command-Line Interface
-
-Click-based CLI with rich terminal output.
-
-| File | Lines | Purpose |
-|---|---|---|
-| `main.py` | ~500 | Click command group with subcommands: `verify`, `repair`, `check-all`, `profile`, `benchmark`, `info`, `dump-config`. |
-| `formatters.py` | ~500 | `ResultFormatter` ABC with `TextFormatter`, `JSONFormatter`, `RichFormatter` implementations. |
-| `config_loader.py` | ~400 | `ConfigLoader` and `ConfigValidator` for TOML/YAML configuration files. |
-| `__init__.py` | — | Public API exports. |
-
-### `dpcegar/utils/` — Shared Utilities
-
-| File | Lines | Purpose |
-|---|---|---|
-| `config.py` | ~300 | `DPCegarConfig` (Pydantic model for all tool parameters), `OutputFormat` enum, `get_config()`, `set_config()`. |
-| `errors.py` | ~300 | Exception hierarchy: `DPCegarError` (base), `LexError`, `ParseError`, `TypeCheckError`, `VerificationError`, `PrivacyViolation`, `RepairError`, `NoRepairFoundError`, `InternalError`. All carry `SourceLoc` metadata. |
-| `math_utils.py` | ~300 | `Interval` arithmetic, `safe_log()`, `safe_exp()`, `phi()`, `phi_inv()`, `laplace_privacy_loss()`, `gaussian_privacy_loss_*()`, `rdp_to_approx_dp()`, `zcdp_to_approx_dp()`. |
-| `logging.py` | ~200 | `LogConfig`, `setup_logging()`, `set_verbosity()`, `get_logger()`. |
-| `timing.py` | ~150 | `Timer` context manager, `TimingStats` aggregator. |
-| `__init__.py` | — | Public API exports. |
-
----
+A verification-and-repair engine that symbolically analyzes differential privacy
+mechanisms against six DP variants (pure, approximate, zCDP, RDP, f-DP, GDP),
+discovers privacy bugs via SMT-driven counterexample search, and synthesizes
+minimal provably-correct code patches with machine-checkable certificates.
 
 ## Installation
-
-### Requirements
-
-- Python ≥ 3.10
-- Z3 solver ≥ 4.12.0
-
-### Install from Source
 
 ```bash
 git clone https://github.com/dp-cegar/dp-cegar.git
 cd dp-cegar
 pip install -e ".[dev]"
-```
-
-### Verify Installation
-
-```bash
 dpcegar --help
 ```
 
-### Dependencies
+**Requirements:** Python ≥ 3.10, Z3 solver ≥ 4.12.0
 
-**Core:**
-- `z3-solver` — SMT solver backend
-- `numpy`, `scipy` — numerical computation
-- `sympy` — symbolic mathematics
-- `click` — CLI framework
-- `rich` — terminal formatting
-- `networkx` — graph algorithms (CFG, lattice)
-- `pydantic` — configuration validation
-
-**Development:**
-- `pytest`, `pytest-cov` — testing
-- `mypy` — static type checking
-- `black` — code formatting
-- `ruff` — linting
+**Dependencies:** `z3-solver`, `numpy`, `scipy`, `sympy`, `click`, `rich`, `networkx`, `pydantic`
 
 ---
 
@@ -321,95 +24,143 @@ dpcegar --help
 
 ### 1. Verify a Mechanism
 
-```python
-# examples/mechanisms/laplace_mechanism.py
-@dp_mechanism(epsilon=1.0)
-def laplace_count(db, epsilon):
-    true_count = query(db, "COUNT", sensitivity=1)
-    noise = laplace(0, 1.0 / epsilon)
-    return true_count + noise
-```
-
 ```bash
-dpcegar verify examples/mechanisms/laplace_mechanism.py \
-    --budget "eps=1.0" \
-    --notion pure
-```
-
-```
-✅ VERIFIED: laplace_count satisfies (1.0)-DP
-   Paths analyzed: 1
-   CEGAR iterations: 0 (proved in abstract)
-   Time: 0.34s
+dpcegar verify examples/mechanisms/laplace_mechanism.py --budget "eps=1.0"
 ```
 
 ### 2. Find a Bug
 
-```python
-# examples/mechanisms/sparse_vector.py (buggy variant)
-@dp_mechanism(epsilon=1.0)
-def sparse_vector_buggy(db, queries, threshold, epsilon):
-    noisy_threshold = query(db, threshold, sensitivity=1) + laplace(0, 2.0/epsilon)
-    for q in queries[:10]:
-        noisy_answer = query(db, q, sensitivity=1) + laplace(0, 1.0/epsilon)  # BUG: wrong scale
-        if noisy_answer >= noisy_threshold:
-            return True
-    return False
-```
-
 ```bash
-dpcegar verify examples/mechanisms/sparse_vector.py \
-    --budget "eps=1.0" \
-    --notion pure
-```
-
-```
-❌ VIOLATED: sparse_vector_buggy does NOT satisfy (1.0)-DP
-   Counterexample:
-     D  = [database with threshold query = 5]
-     D' = [neighboring database with threshold query = 6]
-     Path: loop iteration 3, above-threshold branch
-     Privacy loss: 1.5 > 1.0 (budget exceeded by 50%)
-   Time: 1.27s
+dpcegar verify examples/user_buggy.py --budget "eps=1.0" --notion pure
 ```
 
 ### 3. Repair a Mechanism
 
 ```bash
-dpcegar repair examples/mechanisms/sparse_vector.py \
-    --budget "eps=1.0" \
-    --notion pure \
-    --strategy noise_scale
+dpcegar repair examples/user_buggy.py --budget "eps=1.0" --strategy noise_scale
 ```
 
-```
-🔧 REPAIR FOUND for sparse_vector_buggy → (1.0)-DP
-   Patch:
-     Line 5: laplace(0, 1.0/epsilon) → laplace(0, 2.0/epsilon)
-   Cost: 1.0 (noise scale doubled on 1 site)
-   Verification: ✅ repaired mechanism verified
-   Certificate: sparse_vector_buggy_repair.cert.json
-   Time: 3.41s
+### 4. Generate a Starter Mechanism
+
+```bash
+dpcegar init-mechanism my_mech.py --template laplace
+dpcegar check my_mech.py
 ```
 
 ---
 
-## Verify Your Own Mechanism
+## CLI Reference
 
-DP-CEGAR accepts **any** annotated Python file — not just the built-in examples.
-Write your mechanism, annotate it, and point the CLI at it.
+### Global Options
 
-### Step 1: Generate a Starter File
+```
+dpcegar [OPTIONS] COMMAND [ARGS]...
 
-```bash
-dpcegar init-mechanism my_mechanism.py --template laplace
+Options:
+  --version                       Show version
+  -v, --verbose                   Increase verbosity (-v, -vv, -vvv)
+  --config PATH                   Config file path (TOML/JSON)
+  --output-format [text|json|csv|rich]  Output format (default: text)
+  --timeout INTEGER               Global solver timeout in seconds
 ```
 
-Available templates: `laplace`, `gaussian`, `exponential`, `custom`.
+### `dpcegar verify`
 
-### Step 2: Edit the Mechanism
+Verify that a mechanism satisfies a differential privacy budget.
 
-The generated file uses comment annotations that the parser understands:
+```
+dpcegar verify MECHANISM [OPTIONS]
+
+Options:
+  -b, --budget TEXT       Privacy budget (required), e.g. "eps=1.0"
+  -n, --notion CHOICE     Privacy notion: pure|approx|zcdp|rdp|fdp|gdp (default: pure)
+  -t, --timeout INTEGER   Solver timeout override in seconds
+  -o, --output PATH       Write result to file
+  --certificate/--no-certificate  Produce verification certificate (default: on)
+  --output-format CHOICE  Override output format: text|json|csv (for CI/CD)
+  --sarif                 Output in SARIF format for GitHub Code Scanning
+```
+
+**Examples:**
+
+```bash
+# Basic verification
+dpcegar verify mechanism.py --budget "eps=1.0"
+
+# Approximate DP with JSON output
+dpcegar verify mechanism.json -b "eps=1.0,delta=1e-5" -n approx --output-format json
+
+# CSV output for CI pipelines
+dpcegar verify mechanism.py -b "eps=1.0" --output-format csv -o results.csv
+
+# SARIF for GitHub Code Scanning
+dpcegar verify mechanism.py -b "eps=1.0" --sarif -o results.sarif
+```
+
+### `dpcegar repair`
+
+Repair a mechanism to satisfy a differential privacy budget.
+
+```
+Options:
+  -b, --budget TEXT       Target privacy budget (required)
+  -s, --strategy CHOICE   noise_scale|clipping|composition|combined (default: combined)
+  --max-cost FLOAT        Maximum acceptable repair cost
+  -o, --output PATH       Write result to file
+  --cost-weights TEXT     Cost weights, e.g. "noise=1.0,clip=0.5"
+```
+
+### `dpcegar check`
+
+Parse and validate a mechanism file without running verification.
+
+```bash
+dpcegar check mechanism.py
+# ✓ mechanism.py parsed successfully
+#   Mechanism: my_mechanism
+```
+
+### `dpcegar init-mechanism`
+
+Generate a starter `.py` mechanism file from a template.
+
+```bash
+dpcegar init-mechanism my_mech.py --template gaussian
+```
+
+Templates: `laplace`, `gaussian`, `exponential`, `custom`.
+
+### `dpcegar check-all`
+
+Verify a mechanism under all six supported privacy notions.
+
+```bash
+dpcegar check-all mechanism.py --delta 1e-5
+```
+
+### `dpcegar profile`
+
+Profile a mechanism's privacy across multiple RDP alpha values.
+
+```bash
+dpcegar profile mechanism.py --alphas "2,4,8,16,32,64" --format json
+```
+
+### Other Commands
+
+- **`dpcegar info MECHANISM`** — display parsed mechanism information
+- **`dpcegar benchmark --suite standard`** — run verification benchmarks
+- **`dpcegar dump-config`** — dump current configuration as JSON
+
+---
+
+## Mechanism File Formats
+
+### Annotated Python (`.py`) — Recommended
+
+Write mechanisms as annotated Python functions:
+
+**Comment annotations:**
 
 ```python
 # @dp.mechanism(privacy="1.0-dp", sensitivity=1.0)
@@ -422,807 +173,298 @@ def my_mechanism(db, query):
     return result
 ```
 
-You can also use Python decorator syntax: `@dp_mechanism(epsilon=1.0)`.
+**Decorator syntax:**
 
-### Step 3: Parse-Check (Fast Feedback)
-
-```bash
-dpcegar check my_mechanism.py
-# ✓ my_mechanism.py parsed successfully
-#   Mechanism: my_mechanism
+```python
+@dp_mechanism(epsilon=1.0)
+def my_mechanism(db, query):
+    true_count = query(db, "COUNT", sensitivity=1)
+    noise = laplace(0, 1.0)
+    return true_count + noise
 ```
 
-### Step 4: Verify
+| Annotation | Purpose |
+|---|---|
+| `# @dp.mechanism(privacy="ε-dp", sensitivity=Δf)` | Mark function as DP mechanism |
+| `# @dp.sensitivity(Δf)` | Annotate query sensitivity |
+| `# @dp.noise(kind="...", scale=...)` | Annotate noise addition |
+| `@dp_mechanism(epsilon=ε)` | Decorator-style annotation |
 
-```bash
-dpcegar verify my_mechanism.py --budget "eps=1.0"
+### Simplified JSON — For Non-Python Users
+
+A flat JSON format for specifying standard additive-noise mechanisms without
+writing Python:
+
+```json
+{
+  "name": "laplace",
+  "epsilon": 1.0,
+  "sensitivity": 1.0,
+  "mechanism_type": "additive_noise",
+  "noise_distribution": "laplace"
+}
 ```
 
-### Step 5: Repair (if needed)
+**Fields:**
 
-```bash
-dpcegar repair my_mechanism.py --budget "eps=1.0" --strategy noise_scale
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | No | `"mechanism"` | Mechanism name |
+| `epsilon` | float | No | `1.0` | Privacy budget ε |
+| `delta` | float | No | `0.0` | Privacy parameter δ (for approx DP) |
+| `sensitivity` | float | No | `1.0` | Query sensitivity Δf |
+| `mechanism_type` | string | No | `"additive_noise"` | Mechanism type |
+| `noise_distribution` | string | Yes | — | `"laplace"`, `"gaussian"`, or `"exponential"` |
+| `noise_scale` | float | No | `Δf/ε` | Noise scale (auto-computed if omitted) |
+| `parameters` | object | No | `{}` | Extra metadata |
+
+**Example — Gaussian mechanism:**
+
+```json
+{
+  "name": "gaussian_count",
+  "epsilon": 1.0,
+  "delta": 1e-5,
+  "sensitivity": 1.0,
+  "mechanism_type": "additive_noise",
+  "noise_distribution": "gaussian",
+  "noise_scale": 2.5
+}
 ```
 
-### Annotation Reference
+```bash
+dpcegar verify gaussian_mech.json -b "eps=1.0,delta=1e-5" -n approx
+```
 
-| Annotation | Purpose | Example |
-|---|---|---|
-| `# @dp.mechanism(privacy="ε-dp", sensitivity=Δf)` | Mark a function as a DP mechanism | `# @dp.mechanism(privacy="1.0-dp", sensitivity=1.0)` |
-| `# @dp.sensitivity(Δf)` | Annotate query sensitivity | `# @dp.sensitivity(1.0)` |
-| `# @dp.noise(kind="...", scale=...)` | Annotate noise addition | `# @dp.noise(kind="laplace", scale=1.0)` |
-| `@dp_mechanism(epsilon=ε)` | Decorator-style annotation | `@dp_mechanism(epsilon=1.0)` |
+### JSON MechIR (`.json`) — Full IR
 
-See `examples/user_laplace.py`, `examples/user_gaussian.py`, and
-`examples/user_buggy.py` for complete runnable examples.
+The full MechIR JSON format (with `_type` fields) is produced by
+`dpcegar.ir.serialization.to_json()` for tool interoperability.
+Simplified JSON files (without `_type`) are auto-detected and converted.
+
+### YAML MechIR (`.yaml` / `.yml`)
+
+Same structure as JSON MechIR but in YAML format.
 
 ---
 
-## Supported Privacy Notions
-
-DP-CEGAR supports six differential privacy notions, forming a lattice of
-implications.
-
-### 1. Pure (ε)-Differential Privacy
-
-A randomized mechanism M satisfies ε-differential privacy if for all
-neighboring databases D, D' (differing in one record) and all measurable
-sets S:
-
-```
-Pr[M(D) ∈ S] ≤ eᵋ · Pr[M(D') ∈ S]
-```
-
-The strongest standard notion. Satisfied by the Laplace and exponential
-mechanisms.
-
-### 2. Approximate (ε,δ)-Differential Privacy
-
-M satisfies (ε,δ)-DP if for all neighboring D, D' and all measurable S:
-
-```
-Pr[M(D) ∈ S] ≤ eᵋ · Pr[M(D') ∈ S] + δ
-```
-
-Relaxes pure DP with an additive δ term. Satisfied by the Gaussian mechanism
-(for appropriate σ).
-
-### 3. Zero-Concentrated Differential Privacy (ρ-zCDP)
-
-M satisfies ρ-zCDP if for all neighboring D, D' and all α > 1:
-
-```
-D_α(M(D) ‖ M(D')) ≤ ρ · α
-```
-
-where D_α is the Rényi divergence of order α. Provides tighter composition
-than (ε,δ)-DP.
-
-### 4. Rényi Differential Privacy ((α,ε)-RDP)
-
-M satisfies (α,ε)-RDP if for all neighboring D, D':
-
-```
-D_α(M(D) ‖ M(D')) ≤ ε
-```
-
-Parameterized by Rényi order α. The RDP curve ε(α) characterizes the full
-privacy profile.
-
-### 5. f-Differential Privacy
-
-M satisfies f-DP for a trade-off function f: [0,1] → [0,1] if for all
-neighboring D, D', the hypothesis testing problem of distinguishing M(D)
-from M(D') has trade-off function T(M(D), M(D')) ≥ f, where:
-
-```
-f(α) = inf { 1 - β : type I error ≤ α, type II error = β }
-```
-
-The most general notion; all other notions can be expressed as f-DP for a
-specific trade-off function.
-
-### 6. Gaussian Differential Privacy (μ-GDP)
-
-M satisfies μ-GDP if it satisfies f-DP with the Gaussian trade-off function:
-
-```
-f(α) = Φ(Φ⁻¹(1 - α) - μ)
-```
-
-where Φ is the standard normal CDF. The natural privacy notion for the
-Gaussian mechanism.
-
----
-
-## Privacy Implication Lattice
-
-The six privacy notions form a lattice of implications. When a mechanism is
-verified under a stronger notion, the result propagates to all weaker notions
-automatically.
-
-```
-                    ┌──────────┐
-                    │ Pure DP  │  (strongest)
-                    │  (ε)-DP  │
-                    └────┬─────┘
-                         │
-              ┌──────────┴──────────┐
-              │                     │
-         ┌────┴─────┐         ┌────┴─────┐
-         │  zCDP    │         │  (ε,δ)-DP│
-         │  ρ-zCDP  │         │ Approx.  │
-         └────┬─────┘         └────┬─────┘
-              │                    │
-         ┌────┴─────┐             │
-         │  RDP     │             │
-         │ (α,ε)    ├─────────────┘
-         └────┬─────┘
-              │
-         ┌────┴─────┐
-         │  GDP     │
-         │  μ-GDP   │
-         └────┬─────┘
-              │
-         ┌────┴─────┐
-         │  f-DP    │  (most general)
-         └──────────┘
-```
-
-**Propagation rules:**
-
-| If verified under… | Then also satisfies… |
-|---|---|
-| Pure (ε)-DP | (ε,0)-DP, (ε²/2)-zCDP, (α, ε)-RDP for all α, μ-GDP, f-DP |
-| ρ-zCDP | (ε,δ)-DP via ε = ρ + 2√(ρ·ln(1/δ)), RDP, GDP, f-DP |
-| (α,ε)-RDP | (ε + ln(1/δ)/(α−1), δ)-DP for all δ, GDP, f-DP |
-| μ-GDP | f-DP with Gaussian trade-off, (ε,δ)-DP via calibration |
-| (ε,δ)-DP | f-DP |
-
-**Counterexample propagation** works in the reverse direction: if a mechanism
-violates f-DP, it also violates all stronger notions.
-
----
-
-## CEGAR Algorithm Overview
-
-The Counterexample-Guided Abstraction Refinement (CEGAR) loop verifies that a
-mechanism satisfies a given privacy budget. The key insight is that checking the
-exact privacy loss is often expensive (requires reasoning about all paths and
-noise draws simultaneously), so we start with an over-approximation and refine
-only when needed.
-
-### Algorithm
-
-```
-Input:  MechIR M, PrivacyBudget B, PrivacyNotion N
-Output: VERIFIED | VIOLATED(counterexample)
-
-1.  paths ← PathEnumerator.enumerate(M)
-2.  ratios ← DensityRatioBuilder.build(paths)
-3.  abstraction ← InitialAbstraction(ratios)
-
-4.  loop:
-5.      result ← AbstractVerifier.check(abstraction, B, N)
-6.
-7.      if result = SAFE:
-8.          return VERIFIED           // abstraction proves safety
-9.
-10.     candidate ← CandidateExtractor.extract(result)
-11.     concrete ← ConcreteChecker.check(candidate, M, B, N)
-12.
-13.     if concrete = REAL:
-14.         return VIOLATED(candidate)  // genuine counterexample
-15.
-16.     // Spurious counterexample — refine abstraction
-17.     proof ← SpuriousnessAnalyzer.analyze(candidate, concrete)
-18.     abstraction ← RefinementOperator.refine(abstraction, proof)
-19.
-20.     if ConvergenceDetector.converged(abstraction):
-21.         return UNKNOWN
-```
-
-### Abstraction Strategy
-
-The initial abstraction over-approximates the privacy loss by:
-
-1. **Path merging:** combining paths with similar structure.
-2. **Interval bounding:** replacing exact density ratios with interval bounds.
-3. **Predicate abstraction:** abstracting path conditions to Boolean predicates.
-
-### Refinement Operations
-
-When a spurious counterexample is found, refinement can:
-
-- **Split paths:** separate merged paths that have different privacy behavior.
-- **Tighten intervals:** narrow the density ratio bounds.
-- **Add predicates:** introduce new predicates to distinguish feasible from
-  infeasible behaviors.
-
-### Convergence
-
-The CEGAR loop terminates when:
-
-- The abstraction proves safety (VERIFIED).
-- A genuine counterexample is found (VIOLATED).
-- The abstraction is fully concrete (no more refinement possible).
-- A timeout or iteration limit is reached (UNKNOWN).
-
----
-
-## Repair Synthesis Overview
-
-When CEGAR finds a privacy violation, the repair synthesizer uses
-Counterexample-Guided Inductive Synthesis (CEGIS) to find a minimal code
-patch that restores the privacy guarantee.
-
-### Algorithm
-
-```
-Input:  MechIR M, PrivacyBudget B, Counterexamples C₀,
-        RepairTemplates T
-Output: SUCCESS(patch) | NO_REPAIR
-
-1.  C ← C₀                          // counterexample set
-2.  templates ← TemplateEnumerator.enumerate(M, T)
-
-3.  loop:
-4.      // SYNTHESIZE: find repair consistent with all counterexamples
-5.      patch ← RepairMinimizer.solve(M, templates, C, B)
-6.
-7.      if patch = NONE:
-8.          return NO_REPAIR          // no repair exists for these templates
-9.
-10.     // VERIFY: check repaired mechanism
-11.     M' ← MechPatcher.apply(M, patch)
-12.     result ← CEGAREngine.verify(M', B)
-13.
-14.     if result = VERIFIED:
-15.         certificate ← ProofExtractor.extract(result)
-16.         return SUCCESS(patch, certificate)
-17.
-18.     // Add new counterexample and iterate
-19.     C ← C ∪ { result.counterexample }
-```
-
-### Repair Templates
-
-| Template | Parameters | Description |
-|---|---|---|
-| `noise_scale` | Scale factor per noise draw | Adjust the scale/variance of noise distributions. |
-| `clipping_bound` | Clip value per query | Modify sensitivity by adjusting clipping bounds. |
-| `threshold` | Threshold value | Adjust decision thresholds (e.g., sparse vector). |
-| `composition_split` | Budget split ratios | Reallocate privacy budget across compositions. |
-
-### Cost Function
-
-The optimizer minimizes a weighted L1 distance between the original and
-repaired parameters:
-
-```
-minimize  Σᵢ wᵢ · |pᵢ - pᵢ'|
-subject to  ∀ (D,D') ∈ C: privacy_loss(M'(D), M'(D')) ≤ B
-```
-
-where wᵢ are per-parameter weights (utility-aware) and pᵢ, pᵢ' are the
-original and repaired parameter values.
-
----
-
-## CLI Reference
-
-### Global Options
-
-```
-dpcegar [OPTIONS] COMMAND [ARGS]
-```
-
-| Option | Description |
-|---|---|
-| `--verbose`, `-v` | Increase verbosity (repeat for more: `-vv`, `-vvv`). |
-| `--format` | Output format: `text` (default), `json`, `rich`. |
-| `--output-dir` | Directory for output files (certificates, reports). |
-| `--timeout` | Global timeout in seconds (default: 300). |
-
-### `verify` — Verify a Mechanism
-
-```bash
-dpcegar verify <source_file> --budget <budget> --notion <notion>
-```
-
-| Option | Description |
-|---|---|
-| `<source_file>` | Path to Python source file containing the mechanism. |
-| `--budget` | Privacy budget (e.g., `eps=1.0`, `eps=1.0,delta=1e-5`, `rho=0.5`). |
-| `--notion` | Privacy notion: `pure`, `approx`, `zcdp`, `rdp`, `fdp`, `gdp`. |
-
-**Exit codes:** 0 = verified, 1 = violated, 2 = unknown/timeout, 3 = error.
-
-### `repair` — Synthesize a Repair
-
-```bash
-dpcegar repair <source_file> --budget <budget> --notion <notion> [OPTIONS]
-```
-
-| Option | Description |
-|---|---|
-| `--strategy` | Repair strategy: `noise_scale`, `clipping`, `threshold`, `composition_split`, `auto` (default). |
-| `--max-cost` | Maximum allowed repair cost (default: unlimited). |
-| `--output` | Path to write the repaired source file. |
-
-### `check-all` — Verify Across All Notions
-
-```bash
-dpcegar check-all <source_file> --budget <budget>
-```
-
-Verifies the mechanism against all six privacy notions, using the implication
-lattice to skip redundant checks. Outputs a summary table.
-
-### `profile` — Compute Privacy Profile
-
-```bash
-dpcegar profile <source_file> [OPTIONS]
-```
-
-| Option | Description |
-|---|---|
-| `--alphas` | Rényi orders to evaluate (e.g., `2,5,10,25,50,100`). |
-| `--delta-range` | Range of δ values for (ε,δ) trade-off curve. |
-| `--plot` | Generate a plot of the privacy profile (requires matplotlib). |
-
-### `benchmark` — Run Benchmark Suite
-
-```bash
-dpcegar benchmark [OPTIONS]
-```
-
-| Option | Description |
-|---|---|
-| `--tier` | Benchmark tier: `1` (basic), `2` (composition), `3` (repair), `4` (stress), `all`. |
-| `--output` | Path to write benchmark results (CSV/JSON). |
-
-### `info` — Display Mechanism Information
-
-```bash
-dpcegar info <source_file>
-```
-
-Parses and displays: mechanism name, parameters, noise draws, queries,
-path count, and annotated privacy budget.
-
-### `dump-config` — Output Default Configuration
-
-```bash
-dpcegar dump-config [--format toml|yaml|json]
-```
-
----
-
-## API Reference
-
-For programmatic use, import from the `dpcegar` package directly.
+## Python API
 
 ### Parsing
 
 ```python
-from dpcegar.parser import preprocess, parse_to_mechir
-from dpcegar.parser.type_checker import type_check
+from dpcegar.parser.ast_bridge import parse_mechanism, parse_mechanism_lenient
 
-source = open("mechanism.py").read()
-preprocessed = preprocess(source)
-mechir = parse_to_mechir(preprocessed.source)
-errors = type_check(mechir)
+source = open("my_mechanism.py").read()
+mechir = parse_mechanism(source, file="my_mechanism.py")
+
+# Lenient mode collects errors without raising
+mechir, errors = parse_mechanism_lenient(source, file="my_mechanism.py")
+```
+
+### Loading from JSON (including simplified format)
+
+```python
+from dpcegar.ir.serialization import from_json
+import json
+
+# Simplified JSON
+spec = json.dumps({
+    "name": "laplace",
+    "epsilon": 1.0,
+    "sensitivity": 1.0,
+    "mechanism_type": "additive_noise",
+    "noise_distribution": "laplace",
+})
+mechir = from_json(spec)
 ```
 
 ### Verification
 
 ```python
 from dpcegar.cegar.engine import CEGAREngine, CEGARConfig
-from dpcegar.cegar.orchestrator import VerificationOrchestrator
 from dpcegar.ir.types import PureBudget
 
+engine = CEGAREngine(config=CEGARConfig())
 budget = PureBudget(epsilon=1.0)
-
-# Option 1: Full pipeline
-orchestrator = VerificationOrchestrator()
-result = orchestrator.run(mechir, budget, notion="pure")
-
-# Option 2: Engine directly (after building paths/ratios)
-config = CEGARConfig(max_iterations=100, timeout=300)
-engine = CEGAREngine(config)
-result = engine.verify(abstraction, budget, notion="pure")
+result = engine.verify(mechir, budget)
 
 print(result.verdict)        # CEGARVerdict.VERIFIED or .VIOLATED
-print(result.counterexample) # None or Counterexample object
-print(result.statistics)     # CEGARStatistics
+print(result.counterexample) # None if verified
 ```
 
 ### Repair
 
 ```python
-from dpcegar.repair.synthesizer import RepairSynthesizer, RepairResult
-from dpcegar.repair.templates import TemplateEnumerator
+from dpcegar.repair.synthesizer import RepairSynthesizer
 
-templates = TemplateEnumerator().enumerate(mechir, strategy="noise_scale")
 synthesizer = RepairSynthesizer()
-result = synthesizer.synthesize(mechir, budget, templates, counterexamples)
+result = synthesizer.repair(mechir, budget, strategy="noise_scale")
 
-if result.verdict == RepairVerdict.SUCCESS:
-    patched_ir = result.patched_mechir
-    certificate = result.certificate
+print(result.verdict)   # RepairVerdict.SUCCESS or .FAILURE
+print(result.patch)     # Minimal code patch
 ```
 
-### Multi-Variant Checking
+### Privacy Loss Computation
 
 ```python
-from dpcegar.variants.multi_checker import MultiVariantChecker
+from dpcegar.density.privacy_loss import PrivacyLossComputer
+from dpcegar.density.ratio_builder import DensityRatioBuilder
+from dpcegar.paths.symbolic_path import PathSet, SymbolicPath, PathCondition, NoiseDrawInfo
+from dpcegar.ir.types import NoiseKind, IRType, Var, Const
 
-checker = MultiVariantChecker()
-result = checker.check_all(mechir, budget)
+ps = PathSet()
+ps.add(SymbolicPath(
+    path_condition=PathCondition.trivially_true(),
+    noise_draws=[NoiseDrawInfo(
+        variable="eta", kind=NoiseKind.LAPLACE,
+        center_expr=Var(ty=IRType.REAL, name="q"),
+        scale_expr=Const.real(1.0), site_id=100,
+    )],
+    output_expr=Var(ty=IRType.REAL, name="eta"),
+))
 
-for notion, variant_result in result.results.items():
-    print(f"{notion}: {variant_result.status}")
-    if variant_result.status == VariantStatus.DERIVED:
-        print(f"  Derived from: {variant_result.derived_from}")
-```
-
-### Budget Conversions
-
-```python
-from dpcegar.variants.conversions import BudgetConverter
-from dpcegar.ir.types import ZCDPBudget
-
-converter = BudgetConverter()
-zcdp = ZCDPBudget(rho=0.5)
-approx = converter.zcdp_to_approx(zcdp, delta=1e-5)
-print(f"Equivalent (ε,δ)-DP: ε={approx.epsilon:.4f}, δ={approx.delta}")
-```
-
-### Certificates
-
-```python
-from dpcegar.certificates.certificate import Certificate
-from dpcegar.certificates.proof_extractor import ProofExtractor
-from dpcegar.certificates.report import VerificationReport
-
-extractor = ProofExtractor()
-cert = extractor.extract(cegar_result, format=ProofFormat.ALETHE)
-cert.save("mechanism.cert.json")
-
-report = VerificationReport(result, cert)
-print(report.render())
+dr = DensityRatioBuilder().build(ps)
+comp = PrivacyLossComputer()
+result = comp.check_pure_dp(dr, epsilon=1.0,
+    noise_draws=ps.paths[0].noise_draws, sensitivity=1.0)
+print(f"Private: {result.is_private}, Loss: {result.computed_cost}")
 ```
 
 ---
 
-## Examples
+## Architecture
 
-The `examples/` directory contains runnable mechanism implementations and
-demonstration scripts.
+```
+.py / .json ──▶ Parser ──▶ MechIR (SSA) ──▶ Path Enumerator
+                                                  │
+                                                  ▼
+                                        Density Ratio Builder
+                                                  │
+                                                  ▼
+                                        Privacy Loss Computer (6 notions)
+                                                  │
+                                                  ▼
+                                         SMT Encoder (Z3)
+                                                  │
+                                                  ▼
+                         ┌─── CEGAR Verification Loop ───┐
+                         │ Abstract → Extract → Concrete │
+                         │ SAFE→VERIFIED  REAL→VIOLATED  │
+                         │ SPURIOUS → Refine → loop      │
+                         └───────────────────────────────┘
+                                   │
+                            (if violated)
+                                   ▼
+                         CEGIS Repair Synthesizer
+```
 
-### Demonstration Scripts
+### Module Structure
 
-| File | Description |
+| Module | Purpose |
 |---|---|
-| `demo_verify.py` | End-to-end verification of a Laplace mechanism. |
-| `demo_repair.py` | Find a bug and synthesize a repair. |
-| `demo_multi_variant.py` | Verify across all six privacy notions. |
-
-### Example Mechanisms (`examples/mechanisms/`)
-
-| File | Mechanism | Noise | Notes |
-|---|---|---|---|
-| `laplace_mechanism.py` | Noisy count/sum | Laplace | Basic ε-DP mechanism. |
-| `gaussian_mechanism.py` | Noisy count/sum | Gaussian | (ε,δ)-DP and zCDP. |
-| `exponential_mechanism.py` | Private selection | Exponential | Score-based selection. |
-| `sparse_vector.py` | Sparse Vector Technique | Laplace | Above-threshold queries; includes buggy variant. |
-| `noisy_histogram.py` | Noisy histogram | Laplace | Parallel composition. |
-| `composed_mechanism.py` | Sequential composition | Mixed | Multiple queries with budget splitting. |
-| `iterative_mechanism.py` | Iterative queries | Laplace | Bounded loop with composition. |
-| `private_selection.py` | Report Noisy Max | Exponential | Selects highest-scoring item. |
+| `dpcegar/ir/` | MechIR IR — nodes, types, expressions, JSON/YAML serialization |
+| `dpcegar/parser/` | Python→MechIR — lexer, AST bridge, type checker, sensitivity |
+| `dpcegar/paths/` | Path enumeration — conditions, loop unrolling, feasibility |
+| `dpcegar/density/` | Density ratios and privacy loss under all 6 notions |
+| `dpcegar/smt/` | SMT encoding (Z3) — constraints, counterexamples, OMT |
+| `dpcegar/cegar/` | CEGAR engine — abstraction, refinement, convergence |
+| `dpcegar/repair/` | CEGIS repair — templates, patching, cost minimization |
+| `dpcegar/variants/` | Multi-notion checker — lattice, conversions, profiles |
+| `dpcegar/certificates/` | Proof certificates — LFSC/Alethe, extraction, reports |
+| `dpcegar/cli/` | CLI — commands, formatters (text/JSON/CSV/SARIF/rich) |
+| `dpcegar/utils/` | Config, errors, math utilities, logging, timing |
 
 ---
 
-## Experiment Results
+## CEGAR Loop Explained
 
-The full experiment suite evaluates DP-CEGAR on 26 benchmarks (15 correct, 11
-buggy) across five research questions. Run it with:
+The Counterexample-Guided Abstraction Refinement loop starts with an
+over-approximation of privacy loss and refines only when needed:
 
-```bash
-python experiments/run_experiments.py
-```
+1. **Enumerate paths** through the mechanism's control-flow graph
+2. **Build density ratios** for each path (product of noise PDF ratios)
+3. **Abstract verify** — check if abstract bounds imply privacy
+4. **Extract candidate** counterexample if abstract check fails
+5. **Concretize** — check if the candidate is a genuine violation
+6. **Refine** — if spurious, split paths / tighten intervals / add predicates
+7. **Repeat** until VERIFIED, VIOLATED, or UNKNOWN (timeout/saturation)
 
-Results are saved to `experiments/results.json`. The tool paper is in
-`docs/tool_paper.tex` (compile with `pdflatex docs/tool_paper.tex`).
+## Repair Synthesis
 
-### Headline Results
+When CEGAR finds a violation, CEGIS repair:
 
-| Metric | DP-CEGAR | LightDP | CheckDP | OpenDP |
-|---|---|---|---|---|
-| **Bug Detection F1** | **1.000** | 0.900 | 0.952 | 1.000* |
-| **Privacy Notions** | **6/6** | 2/6 | 2/6 | 3/6 |
-| **SVT Bugs Found** | **6/6** | 4/6 | 5/6 | 0/6 |
-| **Certificates** | **100%** | ✗ | ✗ | ✗ |
-| **Annotations Required** | **None** | Types | Alignments | None |
-
-\*OpenDP supports only 8/26 benchmarks (library-level verification only).
-
-### Key Findings
-
-- **RQ1 (Bug Detection):** DP-CEGAR detects all 11 privacy bugs with zero false
-  positives, including SVT Bug 4 (missing halt) and Bug 6 (value leak) that
-  LightDP and/or CheckDP miss.
-- **RQ2 (Multi-Notion):** DP-CEGAR verifies across all 6 DP notions (pure,
-  approx, zCDP, RDP, GDP, f-DP), 3× more than LightDP/CheckDP.
-- **RQ3 (Repair):** Automated repair infrastructure is implemented with 5
-  template types; further engineering needed for practical convergence.
-- **RQ4 (Scalability):** Verification completes in <11μs for mechanisms with up
-  to 50 noise draws.
-- **RQ5 (Certificates):** 26/26 certificates pass independent validation (100%
-  soundness).
+1. Enumerates **repair templates** (noise scale, clipping, threshold, composition)
+2. Uses **OMT** to find minimum-cost parameters satisfying all counterexamples
+3. **Re-verifies** the patched mechanism; adds new counterexamples if needed
+4. Returns the minimal patch with a proof certificate
 
 ---
 
-## Benchmarks
+## Supported Privacy Notions
 
-### Running Benchmarks
-
-```bash
-# Run all benchmark tiers
-dpcegar benchmark --tier all
-
-# Run a specific tier
-dpcegar benchmark --tier 1
-
-# Export results
-dpcegar benchmark --tier all --output results.json
-```
-
-### Benchmark Tiers
-
-| Tier | File | Description | Mechanisms |
-|---|---|---|---|
-| 1 | `tier1_basic.py` | Basic single-query mechanisms | Count, Sum, Mean with Laplace/Gaussian |
-| 2 | `tier2_composition.py` | Composed mechanisms | Sequential, parallel, amplification |
-| 3 | `tier3_repair.py` | Repair synthesis | Buggy mechanisms + repair time |
-| 4 | `tier4_stress.py` | Stress tests | Large loop bounds, many noise draws |
-
-### Supporting Files
-
-| File | Description |
-|---|---|
-| `benchmark_runner.py` | Harness for running benchmarks with timing and resource tracking. |
-| `bug_catalog.py` | Catalog of known privacy bugs used for regression testing. |
-| `profile_analysis.py` | Benchmarks for privacy profile computation (RDP curves). |
-
----
-
-## Bug Catalog
-
-The `benchmarks/bug_catalog.py` contains known differential privacy bugs that
-DP-CEGAR can detect. These represent common mistakes in mechanism implementations.
-
-| Bug Class | Description | Example |
+| Notion | Budget string | Definition |
 |---|---|---|
-| **Wrong noise scale** | Noise variance is too small for the claimed ε. | `laplace(0, 1/ε)` when sensitivity is 2, should be `laplace(0, 2/ε)`. |
-| **Missing noise** | A query result is used without adding noise. | Returning raw `query(db, q)` on some code path. |
-| **Sensitivity error** | Claimed sensitivity doesn't match the query. | Annotating sensitivity=1 for a SUM query on unbounded data. |
-| **Composition overflow** | Budget accounting is incorrect under composition. | Using ε for each of k queries but claiming total budget is ε (should be kε). |
-| **Sparse vector bugs** | Classic SVT implementation errors. | Wrong noise scale for threshold vs. answer noise; reusing noisy threshold. |
-| **Clipping omission** | Missing clipping before aggregation. | Computing mean without bounding individual contributions. |
-| **Branch leakage** | Control flow depends on private data without noise. | `if query(db, q) > T` without noising the query or threshold. |
-| **Off-by-one in budget** | Privacy budget off by a constant factor. | Using `ε/2` where `ε/3` is needed in a 3-step mechanism. |
+| Pure (ε)-DP | `eps=1.0` | Pr[M(D)∈S] ≤ eᵋ · Pr[M(D')∈S] |
+| Approximate (ε,δ)-DP | `eps=1.0,delta=1e-5` | Adds δ relaxation |
+| zCDP (ρ) | `rho=1.0` | Rényi divergence ≤ ρ·α for all α |
+| RDP (α,ε) | `alpha=2.0,eps=1.0` | Rényi divergence of order α ≤ ε |
+| GDP (μ) | `mu=1.0` | Gaussian trade-off function |
+| f-DP | — | Most general; hypothesis-testing trade-off |
+
+These form an implication lattice: verifying under a stronger notion (e.g., pure DP)
+automatically proves all weaker notions via `dpcegar check-all`.
 
 ---
 
-## Limitations
+## CI/CD Integration
 
-- **Language subset:** Only analyzes a restricted Python subset (DPImp): no
-  recursion, no unbounded loops, no dynamic dispatch, no closures, no
-  higher-order functions. This is inherent to decidable verification.
-
-- **Noise primitives:** Currently supports Laplace, Gaussian, and Exponential
-  mechanisms. Custom noise distributions require extending `noise_models.py`.
-
-- **Sensitivity:** Sensitivity must be annotated on queries or inferrable from
-  simple data-flow analysis. Complex sensitivity analysis (e.g., for iterative
-  algorithms with data-dependent stopping) is not supported.
-
-- **Transcendentals:** SMT reasoning about transcendental functions (log, exp,
-  Φ) uses piecewise-linear approximations. In rare cases, this can produce
-  UNKNOWN results when tighter bounds are needed.
-
-- **Scalability:** Path enumeration is exponential in the number of branches.
-  Mechanisms with many branches or large loop unrolling bounds may hit
-  timeouts. The CEGAR abstraction mitigates this, but does not eliminate it.
-
-- **Floating-point:** All analysis is in exact rational arithmetic (via Z3's
-  QF_LRA). Floating-point rounding effects in actual implementations are not
-  modeled. This means DP-CEGAR may verify a mechanism that violates DP due to
-  floating-point issues.
-
-- **Repair templates:** Repair synthesis is limited to the template vocabulary
-  (noise scale, clipping, threshold, composition split). Structural repairs
-  (e.g., adding a missing clipping step) are not yet supported.
-
-- **Interactive mechanisms:** Mechanisms with adaptive queries (where the next
-  query depends on previous noisy answers) are supported only with bounded
-  interaction rounds.
-
----
-
-## Development
-
-### Running Tests
+### JSON Output
 
 ```bash
-# All tests
-pytest
-
-# Unit tests only
-pytest tests/unit/
-
-# Integration tests only
-pytest tests/integration/
-
-# Skip slow tests
-pytest -m "not slow"
-
-# With coverage
-pytest --cov=dpcegar --cov-report=html
+dpcegar verify mechanism.py -b "eps=1.0" --output-format json
 ```
 
-### Linting and Formatting
+### CSV Output
 
 ```bash
-# Format code
-black dpcegar/ tests/
-
-# Lint
-ruff check dpcegar/ tests/
-
-# Type check
-mypy dpcegar/
+dpcegar verify mechanism.py -b "eps=1.0" --output-format csv
+# verdict,budget,bounds
 ```
 
-### Test Structure
+### SARIF (GitHub Code Scanning)
 
+```bash
+dpcegar verify mechanism.py -b "eps=1.0" --sarif -o results.sarif
 ```
-tests/
-├── unit/                          # Unit tests by module
-│   ├── conftest.py                # Shared fixtures
-│   ├── test_ir_nodes.py           # IR node construction and traversal
-│   ├── test_ir_types.py           # Type system and expressions
-│   ├── test_ir_visitors.py        # Visitor pattern tests
-│   ├── test_serialization.py      # JSON round-trip tests
-│   ├── test_parser_lexer.py       # Lexer tokenization
-│   ├── test_parser_ast_bridge.py  # AST-to-IR conversion
-│   ├── test_parser_type_checker.py# Type checking validation
-│   ├── test_parser_sensitivity.py # Sensitivity analysis
-│   ├── test_parser_source_map.py  # Source mapping
-│   ├── test_paths_enumerator.py   # Path enumeration
-│   ├── test_paths_loop.py         # Loop unrolling
-│   ├── test_paths_symbolic.py     # Symbolic path operations
-│   ├── test_density_ratio.py      # Density ratio construction
-│   ├── test_density_noise.py      # Noise model tests
-│   ├── test_density_privacy_loss.py # Privacy loss computation
-│   ├── test_density_composition.py# Composition theorems
-│   ├── test_smt_encoding.py       # SMT encoding correctness
-│   ├── test_smt_solver.py         # Solver wrapper tests
-│   ├── test_smt_privacy_encoder.py# Privacy notion encoding
-│   ├── test_smt_counterexample.py # Counterexample extraction
-│   ├── test_smt_optimizer.py      # OMT tests
-│   ├── test_smt_transcendental.py # Transcendental approximation
-│   ├── test_smt_theory_selection.py # Theory auto-configuration
-│   ├── test_cegar_engine.py       # CEGAR loop tests
-│   ├── test_cegar_abstraction.py  # Abstraction operations
-│   ├── test_cegar_refinement.py   # Refinement operations
-│   ├── test_cegar_orchestrator.py # Pipeline orchestration
-│   ├── test_repair_synthesizer.py # CEGIS repair tests
-│   ├── test_repair_templates.py   # Template enumeration
-│   ├── test_repair_patcher.py     # Patch application
-│   ├── test_variants_lattice.py   # Implication lattice
-│   ├── test_variants_multi_checker.py # Multi-notion verification
-│   ├── test_variants_conversions.py # Budget conversion
-│   ├── test_variants_profile.py   # Privacy profile computation
-│   ├── test_certificates.py       # Certificate generation
-│   ├── test_cli.py                # CLI command tests
-│   └── test_math_utils.py         # Math utility tests
-└── integration/
-    ├── conftest.py                # Integration fixtures
-    ├── test_end_to_end.py         # Full pipeline tests
-    ├── test_bug_detection.py      # Bug catalog regression
-    └── test_repair_pipeline.py    # End-to-end repair tests
-```
+
+Upload the SARIF file via the GitHub Code Scanning API to surface privacy
+violations as alerts in pull requests.
 
 ---
 
-## Code Statistics
+## Configuration
 
-| Module | Files | Lines (approx.) | Description |
-|---|---|---|---|
-| `dpcegar/ir` | 5 | 2,561 | IR types, nodes, visitors, serialization |
-| `dpcegar/parser` | 7 | 4,159 | Python AST to MechIR, type checking, sensitivity |
-| `dpcegar/paths` | 6 | 2,203 | Path enumeration, loop unrolling, feasibility |
-| `dpcegar/density` | 5 | 2,561 | Density ratios, noise models, privacy loss, composition |
-| `dpcegar/smt` | 8 | 5,489 | Z3 encoding, privacy encoders, solver, OMT |
-| `dpcegar/cegar` | 5 | 4,352 | CEGAR engine, abstraction, refinement, orchestrator |
-| `dpcegar/repair` | 5 | 3,477 | CEGIS repair, templates, patcher, validator |
-| `dpcegar/variants` | 5 | 3,960 | Implication lattice, multi-variant checker, conversions |
-| `dpcegar/certificates` | 4 | 2,482 | Certificate generation, proof extraction, reports |
-| `dpcegar/cli` | 4 | 1,432 | CLI commands, formatters, config loading |
-| `dpcegar/utils` | 6 | 1,298 | Math utilities, config, errors, logging, timing |
-| `tests` | 45 | 18,838 | Unit and integration tests |
-| `examples` | 13 | 3,485 | Mechanism examples and demos |
-| `benchmarks` | 8 | 3,456 | Benchmark suite and bug catalog |
-| **Total** | **127** | **59,772** | |
+Configuration merges three sources (lowest to highest priority):
+config file → environment variables → CLI flags.
 
----
+```bash
+dpcegar --config dpcegar.toml verify mechanism.py -b "eps=1.0"
 
-## References
+# Environment variables (DPCEGAR_ prefix, __ for nesting)
+export DPCEGAR_CEGAR__TIMEOUT_SECONDS=120
+export DPCEGAR_SOLVER__TIMEOUT_MS=60000
+```
 
-### Core Theory
+Profiles: `fast`, `standard`, `thorough`.
 
-1. **Dwork, C., & Roth, A.** (2014). *The Algorithmic Foundations of
-   Differential Privacy.* Foundations and Trends in Theoretical Computer
-   Science, 9(3–4), 211–407.
-   — The definitive reference for differential privacy definitions, mechanisms,
-   and composition theorems.
+## Testing
 
-2. **Narodytska, N., et al.** (2019). *Verifying Properties of Binarized Deep
-   Neural Networks.* AAAI.
-   — CEGAR-based verification methodology that inspired the abstraction-refinement
-   approach used in DP-CEGAR.
-
-### Privacy Notions
-
-3. **Mironov, I.** (2017). *Rényi Differential Privacy.* CSF.
-   — Defines Rényi DP and the RDP framework for composition.
-
-4. **Bun, M., & Dwork, C.** (2016). *Concentrated Differential Privacy.*
-   arXiv:1605.02065.
-   — Introduces zero-concentrated differential privacy (zCDP).
-
-5. **Dong, J., Roth, A., & Su, W. J.** (2022). *Gaussian Differential
-   Privacy.* JRSS-B, 84(1), 3–37.
-   — Defines f-DP and Gaussian DP, unifying privacy notions via hypothesis
-   testing.
-
-### Verification Tools
-
-6. **Zhang, D., & Kifer, D.** (2017). *LightDP: Towards Automating
-   Differential Privacy Proofs.* POPL.
-   — Type-system approach to DP verification; requires type annotations.
-
-7. **Wang, Y., Ding, Z., Kifer, D., & Zhang, D.** (2020). *CheckDP:
-   An Automated and Integrated Approach for Proving Differential Privacy or
-   Finding Precise Counterexamples.* CCS.
-   — Automated DP checking with counterexample search.
-
-### SMT and CEGAR
-
-8. **de Moura, L., & Bjørner, N.** (2008). *Z3: An Efficient SMT Solver.*
-   TACAS.
-   — The Z3 SMT solver used as the backend reasoning engine.
-
-9. **Clarke, E. M., Grumberg, O., Jha, S., Lu, Y., & Veith, H.** (2003).
-   *Counterexample-Guided Abstraction Refinement for Symbolic Model Checking.*
-   JACM, 50(5), 752–794.
-   — The foundational CEGAR paper.
-
-### Repair and Synthesis
-
-10. **Solar-Lezama, A.** (2008). *Program Synthesis by Sketching.* PhD Thesis,
-    UC Berkeley.
-    — CEGIS methodology used for repair synthesis.
-
-11. **Bjørner, N., Phan, A.-D., & Fleckenstein, L.** (2015). *νZ – An
-    Optimizing SMT Solver.* TACAS.
-    — Optimization Modulo Theories (OMT) used for minimum-cost repair.
-
----
+```bash
+pip install -e ".[dev]"
+python -m pytest tests/ -x -q --timeout=30
+```
 
 ## License
 
-MIT License. See `pyproject.toml` for details.
+MIT

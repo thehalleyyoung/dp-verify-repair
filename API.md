@@ -13,10 +13,14 @@ Verify that a mechanism satisfies a differential privacy budget.
 - `--timeout`, `-t` — Solver timeout in seconds.
 - `--output`, `-o` — Write result to file.
 - `--certificate/--no-certificate` — Produce a verification certificate (default: on).
+- `--output-format` — Override output format for this command: `text`, `json`, `csv` (for CI/CD integration).
+- `--sarif` — Output results in SARIF 2.1.0 format for GitHub Code Scanning.
 
 ```bash
 dpcegar verify my_mechanism.py --budget "eps=1.0"
 dpcegar verify mechanism.json --budget "eps=1.0,delta=1e-5" --notion approx
+dpcegar verify mechanism.py --budget "eps=1.0" --output-format json
+dpcegar verify mechanism.py --budget "eps=1.0" --sarif -o results.sarif
 ```
 
 ### `dpcegar repair <mechanism> --budget <budget>`

@@ -39,6 +39,7 @@ class OutputFormat(str, Enum):
     """Output format for verification results."""
     TEXT = "text"
     JSON = "json"
+    CSV = "csv"
     RICH = "rich"
 
 

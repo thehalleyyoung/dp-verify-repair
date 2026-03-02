@@ -53,6 +53,8 @@ from dpcegar.cli.formatters import (
     TextFormatter,
     JSONFormatter,
     RichFormatter,
+    CSVFormatter,
+    SARIFFormatter,
 )
 from dpcegar.cli.config_loader import ConfigLoader, ConfigValidator
 
@@ -74,6 +76,8 @@ _FORMATTER_MAP: dict[str, type[ResultFormatter]] = {
     "text": TextFormatter,
     "json": JSONFormatter,
     "rich": RichFormatter,
+    "csv": CSVFormatter,
+    "sarif": SARIFFormatter,
 }
 
 
@@ -260,7 +264,7 @@ def _write_output(text: str, output_path: str | None) -> None:
 @click.option("--config", type=click.Path(exists=False), default=None, help="Config file path.")
 @click.option(
     "--output-format",
-    type=click.Choice(["text", "json", "rich"]),
+    type=click.Choice(["text", "json", "csv", "rich"]),
     default="text",
     help="Output format.",
 )
@@ -301,6 +305,13 @@ def cli(
 @click.option("--timeout", "-t", type=int, default=None, help="Solver timeout override in seconds.")
 @click.option("--output", "-o", type=click.Path(), default=None, help="Write result to file.")
 @click.option("--certificate/--no-certificate", default=True, help="Produce a verification certificate.")
+@click.option(
+    "--output-format",
+    type=click.Choice(["text", "json", "csv"]),
+    default=None,
+    help="Output format for verification results (overrides global --output-format). Useful for CI/CD integration.",
+)
+@click.option("--sarif", is_flag=True, default=False, help="Output results in SARIF format for GitHub Code Scanning.")
 @click.pass_context
 def verify(
     ctx: click.Context,
@@ -310,6 +321,8 @@ def verify(
     timeout: int | None,
     output: str | None,
     certificate: bool,
+    output_format: str | None,
+    sarif: bool,
 ) -> None:
     """Verify that a mechanism satisfies a differential privacy budget."""
     logger = get_logger("cli")
@@ -327,7 +340,12 @@ def verify(
     ))
     result: CEGARResult = engine.verify(mechir, parsed_budget, produce_certificate=certificate)
 
-    fmt = ctx.obj.get("output_format", "text")
+    if sarif:
+        fmt = "sarif"
+    elif output_format:
+        fmt = output_format
+    else:
+        fmt = ctx.obj.get("output_format", "text")
     _write_output(_format_result(result, fmt), output)
 
     if result.verdict != CEGARVerdict.VERIFIED:
