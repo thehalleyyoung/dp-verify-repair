@@ -212,6 +212,16 @@ def _format_result(result: Any, fmt: str) -> str:
     return str(result)
 
 
+def _get_timeout(cfg: DPCegarConfig, ctx_timeout: int | None = None) -> float:
+    """Return the effective CEGAR timeout in seconds.
+
+    Priority: CLI ``--timeout`` flag > ``cfg.solver.timeout_ms`` (converted) > 300s default.
+    """
+    if ctx_timeout is not None:
+        return float(ctx_timeout)
+    return cfg.solver.timeout_ms / 1000.0
+
+
 def _setup_config(ctx: click.Context) -> DPCegarConfig:
     """Build the effective configuration from CLI context.
 
@@ -229,10 +239,6 @@ def _setup_config(ctx: click.Context) -> DPCegarConfig:
     output_format: str | None = ctx.obj.get("output_format")
     if output_format:
         cfg.output.format = OutputFormat(output_format)
-
-    timeout: int | None = ctx.obj.get("timeout")
-    if timeout is not None:
-        cfg.cegar.timeout_seconds = timeout
 
     warnings = ConfigValidator().validate(cfg)
     if warnings:
@@ -327,18 +333,28 @@ def verify(
     """Verify that a mechanism satisfies a differential privacy budget."""
     logger = get_logger("cli")
     cfg = _setup_config(ctx)
-
-    if timeout is not None:
-        cfg.cegar.timeout_seconds = timeout
+    effective_timeout = _get_timeout(cfg, timeout or ctx.obj.get("timeout"))
 
     logger.info("Verifying mechanism: %s", mechanism)
     mechir = _load_mechanism(mechanism)
     parsed_budget = _parse_budget(budget, notion)
 
+    from dpcegar.paths.enumerator import PathEnumerator
+    from dpcegar.density.ratio_builder import DensityRatioBuilder
+
+    enumerator = PathEnumerator()
+    path_set = enumerator.enumerate(mechir)
+
+    ratio_builder = DensityRatioBuilder()
+    density_result = ratio_builder.build(path_set)
+
     engine = CEGAREngine(config=CEGARConfig(
-        timeout_seconds=cfg.cegar.timeout_seconds,
+        timeout_seconds=effective_timeout,
     ))
-    result: CEGARResult = engine.verify(mechir, parsed_budget, produce_certificate=certificate)
+    result: CEGARResult = engine.verify(
+        path_set, parsed_budget,
+        density_ratios=density_result.ratios if density_result.ratios else None,
+    )
 
     if sarif:
         fmt = "sarif"
@@ -393,15 +409,15 @@ def repair(
             k, v = tok.strip().split("=", 1)
             weights[k.strip()] = float(v.strip())
 
-    from dpcegar.repair.synthesizer import RepairSynthesizer
+    from dpcegar.repair.synthesizer import RepairSynthesizer, SynthesizerConfig
 
-    synthesizer = RepairSynthesizer(config=cfg.repair)
-    result: RepairResult = synthesizer.repair(
+    synth_config = SynthesizerConfig(
+        timeout_seconds=cfg.repair.timeout_seconds,
+    )
+    synthesizer = RepairSynthesizer(config=synth_config)
+    result: RepairResult = synthesizer.synthesize(
         mechir,
         parsed_budget,
-        strategy=strategy,
-        max_cost=max_cost,
-        cost_weights=weights or None,
     )
 
     fmt = ctx.obj.get("output_format", "text")
@@ -437,7 +453,7 @@ def check_all(
 
     from dpcegar.variants.multi_checker import MultiVariantChecker, MultiVariantResult
 
-    engine = CEGAREngine(config=CEGARConfig(timeout_seconds=cfg.cegar.timeout_seconds))
+    engine = CEGAREngine(config=CEGARConfig(timeout_seconds=_get_timeout(cfg, ctx.obj.get("timeout"))))
 
     budgets_map: dict[PrivacyNotion, PrivacyBudget] = {
         PrivacyNotion.PURE_DP: PureBudget(epsilon=1.0),
@@ -499,15 +515,26 @@ def profile(
     mechir = _load_mechanism(mechanism)
     alpha_list = [float(a.strip()) for a in alphas.split(",")]
 
-    engine = CEGAREngine(config=CEGARConfig(timeout_seconds=cfg.cegar.timeout_seconds))
+    from dpcegar.paths.enumerator import PathEnumerator
+    from dpcegar.density.ratio_builder import DensityRatioBuilder
+
+    enumerator = PathEnumerator()
+    path_set = enumerator.enumerate(mechir)
+    ratio_builder = DensityRatioBuilder()
+    density_result = ratio_builder.build(path_set)
+
+    engine = CEGAREngine(config=CEGARConfig(timeout_seconds=_get_timeout(cfg, ctx.obj.get("timeout"))))
 
     profile_data: list[dict[str, Any]] = []
     for alpha in alpha_list:
         budget = RDPBudget(alpha=alpha, epsilon=1.0)
-        result = engine.verify(mechir, budget)
+        result = engine.verify(
+            path_set, budget,
+            density_ratios=density_result.ratios if density_result.ratios else None,
+        )
         profile_data.append({
             "alpha": alpha,
-            "verdict": result.verdict.value if hasattr(result.verdict, "value") else str(result.verdict),
+            "verdict": result.verdict.name if hasattr(result.verdict, "name") else str(result.verdict),
             "bounds": result.final_bounds,
         })
 
@@ -569,11 +596,23 @@ def benchmark(
         try:
             mechir = _load_mechanism(entry["path"])
             budget = _parse_budget(entry["budget"], entry.get("notion", "pure"))
-            result = engine.verify(mechir, budget)
+
+            from dpcegar.paths.enumerator import PathEnumerator
+            from dpcegar.density.ratio_builder import DensityRatioBuilder
+
+            enumerator = PathEnumerator()
+            path_set = enumerator.enumerate(mechir)
+            ratio_builder = DensityRatioBuilder()
+            density_result = ratio_builder.build(path_set)
+
+            result = engine.verify(
+                path_set, budget,
+                density_ratios=density_result.ratios if density_result.ratios else None,
+            )
             elapsed = time.monotonic() - start
             results.append({
                 "name": name,
-                "verdict": result.verdict.value if hasattr(result.verdict, "value") else str(result.verdict),
+                "verdict": result.verdict.name if hasattr(result.verdict, "name") else str(result.verdict),
                 "time_seconds": round(elapsed, 3),
                 "statistics": result.statistics,
             })

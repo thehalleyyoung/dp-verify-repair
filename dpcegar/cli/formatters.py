@@ -190,7 +190,7 @@ class JSONFormatter(ResultFormatter):
     def format_verification(self, result: CEGARResult) -> str:
         """Return *result* as a JSON string."""
         data: dict[str, Any] = {
-            "verdict": result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict),
+            "verdict": result.verdict.name if isinstance(result.verdict, Enum) else str(result.verdict),
             "budget": _budget_to_dict(result.budget) if result.budget else None,
             "certificate": _safe_serialize(result.certificate) if result.certificate else None,
             "counterexample": _safe_serialize(result.counterexample) if result.counterexample else None,
@@ -202,7 +202,7 @@ class JSONFormatter(ResultFormatter):
     def format_repair(self, result: RepairResult) -> str:
         """Return *result* as a JSON string."""
         data: dict[str, Any] = {
-            "verdict": result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict),
+            "verdict": result.verdict.name if isinstance(result.verdict, Enum) else str(result.verdict),
             "parameter_values": _safe_serialize(result.parameter_values) if result.parameter_values else None,
             "repair_cost": result.repair_cost,
             "statistics": _safe_serialize(result.statistics) if result.statistics else None,
@@ -214,7 +214,7 @@ class JSONFormatter(ResultFormatter):
         data: dict[str, Any] = {}
         for notion, res in results.items():
             data[notion] = {
-                "verdict": res.verdict.value if isinstance(res.verdict, Enum) else str(res.verdict),
+                "verdict": res.verdict.name if isinstance(res.verdict, Enum) else str(res.verdict),
                 "budget": _budget_to_dict(res.budget) if res.budget else None,
                 "statistics": _safe_serialize(res.statistics) if res.statistics else None,
             }
@@ -237,7 +237,7 @@ class TextFormatter(ResultFormatter):
 
     def format_verification(self, result: CEGARResult) -> str:
         """Render a readable verification summary."""
-        verdict_str = result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict)
+        verdict_str = result.verdict.name if isinstance(result.verdict, Enum) else str(result.verdict)
         icon = "✓" if result.verdict == CEGARVerdict.VERIFIED else "✗"
         lines: list[str] = [
             self._header("Verification Result"),
@@ -259,7 +259,7 @@ class TextFormatter(ResultFormatter):
 
     def format_repair(self, result: RepairResult) -> str:
         """Render a readable repair summary."""
-        verdict_str = result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict)
+        verdict_str = result.verdict.name if isinstance(result.verdict, Enum) else str(result.verdict)
         icon = "✓" if result.verdict == RepairVerdict.SUCCESS else "✗"
         lines: list[str] = [
             self._header("Repair Result"),
@@ -282,7 +282,7 @@ class TextFormatter(ResultFormatter):
             "  " + "-" * (self._SECTION_WIDTH - 2),
         ]
         for notion, res in results.items():
-            verdict_str = res.verdict.value if isinstance(res.verdict, Enum) else str(res.verdict)
+            verdict_str = res.verdict.name if isinstance(res.verdict, Enum) else str(res.verdict)
             budget_str = _budget_to_str(res.budget) if res.budget else "—"
             lines.append(f"  {notion:<12} {verdict_str:<16} {budget_str}")
         lines.append(self._rule())
@@ -334,7 +334,7 @@ class RichFormatter(ResultFormatter):
         """Render verification result with rich markup."""
         verdict = result.verdict
         colour = "green" if verdict == CEGARVerdict.VERIFIED else "red"
-        verdict_str = verdict.value if isinstance(verdict, Enum) else str(verdict)
+        verdict_str = verdict.name if isinstance(verdict, Enum) else str(verdict)
         lines: list[str] = [
             "[bold]Verification Result[/bold]",
             f"  Verdict : [{colour}]{verdict_str}[/{colour}]",
@@ -356,7 +356,7 @@ class RichFormatter(ResultFormatter):
         """Render repair result with rich markup."""
         verdict = result.verdict
         colour = "green" if verdict == RepairVerdict.SUCCESS else "red"
-        verdict_str = verdict.value if isinstance(verdict, Enum) else str(verdict)
+        verdict_str = verdict.name if isinstance(verdict, Enum) else str(verdict)
         lines: list[str] = [
             "[bold]Repair Result[/bold]",
             f"  Verdict : [{colour}]{verdict_str}[/{colour}]",
@@ -375,7 +375,7 @@ class RichFormatter(ResultFormatter):
         for notion, res in results.items():
             verdict = res.verdict
             colour = "green" if verdict == CEGARVerdict.VERIFIED else "red"
-            verdict_str = verdict.value if isinstance(verdict, Enum) else str(verdict)
+            verdict_str = verdict.name if isinstance(verdict, Enum) else str(verdict)
             budget_str = _budget_to_str(res.budget) if res.budget else "—"
             lines.append(
                 f"  [bold]{notion:<12}[/bold] [{colour}]{verdict_str:<16}[/{colour}] [cyan]{budget_str}[/cyan]"
@@ -402,7 +402,7 @@ class CSVFormatter(ResultFormatter):
 
     def format_verification(self, result: CEGARResult) -> str:
         """Return *result* as CSV rows (header + data)."""
-        verdict = result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict)
+        verdict = result.verdict.name if isinstance(result.verdict, Enum) else str(result.verdict)
         budget_str = _budget_to_str(result.budget) if result.budget else ""
         bounds = str(result.final_bounds) if result.final_bounds else ""
         lines = ["verdict,budget,bounds"]
@@ -411,7 +411,7 @@ class CSVFormatter(ResultFormatter):
 
     def format_repair(self, result: RepairResult) -> str:
         """Return *result* as CSV rows."""
-        verdict = result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict)
+        verdict = result.verdict.name if isinstance(result.verdict, Enum) else str(result.verdict)
         cost = str(result.repair_cost) if result.repair_cost is not None else ""
         lines = ["verdict,repair_cost"]
         lines.append(f"{verdict},{cost}")
@@ -421,7 +421,7 @@ class CSVFormatter(ResultFormatter):
         """Return multi-notion results as CSV."""
         lines = ["notion,verdict,budget"]
         for notion, res in results.items():
-            verdict = res.verdict.value if isinstance(res.verdict, Enum) else str(res.verdict)
+            verdict = res.verdict.name if isinstance(res.verdict, Enum) else str(res.verdict)
             budget_str = _budget_to_str(res.budget) if res.budget else ""
             lines.append(f"{notion},{verdict},{budget_str}")
         return "\n".join(lines)
@@ -447,7 +447,7 @@ class SARIFFormatter(ResultFormatter):
 
     def format_verification(self, result: CEGARResult) -> str:
         """Return *result* as a SARIF JSON document."""
-        verdict = result.verdict.value if isinstance(result.verdict, Enum) else str(result.verdict)
+        verdict = result.verdict.name if isinstance(result.verdict, Enum) else str(result.verdict)
         is_violation = result.verdict != CEGARVerdict.VERIFIED
 
         results_list: list[dict[str, Any]] = []
@@ -585,8 +585,8 @@ class TableFormatter:
         for key in all_keys:
             va = results_a.get(key)
             vb = results_b.get(key)
-            va_str = (va.verdict.value if isinstance(va.verdict, Enum) else str(va.verdict)) if va else "—"
-            vb_str = (vb.verdict.value if isinstance(vb.verdict, Enum) else str(vb.verdict)) if vb else "—"
+            va_str = (va.verdict.name if isinstance(va.verdict, Enum) else str(va.verdict)) if va else "—"
+            vb_str = (vb.verdict.name if isinstance(vb.verdict, Enum) else str(vb.verdict)) if vb else "—"
             match = "✓" if va_str == vb_str else "✗"
             rows.append([key, va_str, vb_str, match])
         return self.format_table(headers, rows)
